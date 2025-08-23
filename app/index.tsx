@@ -15,6 +15,9 @@ import {
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Ionicons } from '@expo/vector-icons';
 import quranApiService, { Surah, Ayah, SearchResult } from '@/services/quranApi';
+import { useAuth } from '@/contexts/AuthContext';
+import { logout } from '@/services/firebase';
+import { router } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 
@@ -44,6 +47,7 @@ const SURAHS = [
 
 export default function QuranReaderScreen() {
   const colorScheme = useColorScheme();
+  const { user, loading: authLoading } = useAuth();
   const [isLightMode, setIsLightMode] = useState(false);
   const [currentMode, setCurrentMode] = useState('reading');
   const [isVoiceActive, setIsVoiceActive] = useState(false);
@@ -60,6 +64,23 @@ export default function QuranReaderScreen() {
   } | null>(null);
 
   const theme = isLightMode ? 'light' : 'dark';
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.replace('/login' as any);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to logout');
+    }
+  };
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace('/login' as any);
+    }
+  }, [user, authLoading]);
 
   // Fetch surah data from API
   const fetchSurah = async (surahNumber: number) => {
@@ -154,6 +175,21 @@ export default function QuranReaderScreen() {
 
   const getIconColor = () => theme === 'light' ? '#3d3d3d' : '#e8e8e8';
 
+  if (authLoading) {
+    return (
+      <View style={[styles.container, styles[theme], styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={theme === 'light' ? '#5a5a5a' : '#ffd700'} />
+        <Text style={[styles.loadingText, styles[`${theme}LoadingText`]]}>
+          Checking authentication...
+        </Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return null; // Will redirect to login
+  }
+
   if (loading && !currentSurah) {
     return (
       <View style={[styles.container, styles[theme], styles.loadingContainer]}>
@@ -171,10 +207,23 @@ export default function QuranReaderScreen() {
       
       {/* Header */}
       <View style={[styles.header, styles[`${theme}Header`]]}>
-        <Text style={[styles.title, styles[`${theme}Title`]]}>أمال</Text>
-        <Text style={[styles.subtitle, styles[`${theme}Subtitle`]]}>
-          Enhanced Quran Reader
-        </Text>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.title, styles[`${theme}Title`]]}>أمال</Text>
+          <Text style={[styles.subtitle, styles[`${theme}Subtitle`]]}>
+            Enhanced Quran Reader
+          </Text>
+          {user && (
+            <Text style={[styles.userEmail, { color: theme === 'light' ? '#6a6a6a' : '#b0b0b0' }]}>
+              Welcome, {user.email}
+            </Text>
+          )}
+        </View>
+        {user && (
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color={theme === 'light' ? '#3d3d3d' : '#ffd700'} />
+            <Text style={[styles.logoutText, { color: theme === 'light' ? '#3d3d3d' : '#ffd700' }]}>Logout</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Theme Toggle */}
@@ -455,10 +504,29 @@ const styles = StyleSheet.create({
     color: '#3d3d3d',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 40,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     marginBottom: 40,
+  },
+  headerLeft: {
+    alignItems: 'center',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    gap: 5,
+  },
+  logoutText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   darkHeader: {
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
@@ -1018,5 +1086,9 @@ const styles = StyleSheet.create({
   },
   lightVerseTranslation: {
     color: '#6a6a6a',
+  },
+  userEmail: {
+    fontSize: 14,
+    marginTop: 5,
   },
 });
