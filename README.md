@@ -1,50 +1,157 @@
-# Welcome to your Expo app 👋
+# Amal - Enhanced Quran Reader
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A beautiful, modern Quran reader app built with React Native and Expo, designed to help Muslims better interact with their Salat and Quran reading. Now fully integrated with the Al-Quran Cloud API for real-time Quran data and voice recognition capabilities.
 
-## Get started
+## 🌟 **New Features (v2.0)**
 
-1. Install dependencies
+- **🔌 Real-Time API Integration** - Connected to Al-Quran Cloud API for live Quran data
+- **🎯 Voice Recognition Ready** - Built-in voice command parsing for hands-free navigation
+- **📚 Complete Surah Library** - All 114 surahs with Arabic text and English translations
+- **🔍 Advanced Search** - Search across multiple editions and translations
+- **🎧 Audio Integration** - Ready for Mishary Alafasy recitations
+- **📱 No Bottom Navigation** - Clean, focused reading experience
 
-   ```bash
-   npm install
-   ```
+## 🚀 **API Integration**
 
-2. Start the app
+The app now uses the [Al-Quran Cloud API](http://api.alquran.cloud/) for:
 
-   ```bash
-   npx expo start
-   ```
+- **Complete Quran Text** - Uthmani script with proper Arabic rendering
+- **Multiple Translations** - Muhammad Asad, Pickthall, Yusuf Ali, and more
+- **Audio Recitations** - Mishary Alafasy and other reciters
+- **Advanced Search** - Keyword search across all surahs and editions
+- **Voice Commands** - Natural language processing for navigation
 
-In the output, you'll find options to open the app in a
+### **API Endpoints Used:**
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- `GET /surah/{number}/{edition}` - Fetch complete surahs
+- `GET /ayah/{reference}/{edition}` - Fetch specific verses
+- `GET /search/{keyword}/{surah}/{edition}` - Search functionality
+- `GET /ayah/{reference}/editions/{editions}` - Multiple translations
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 🎤 **Voice Recognition System**
 
-## Get a fresh project
+The app is designed to work with voice recognition systems that can:
 
-When you're ready, run:
+- **Navigate Surahs**: "Go to Surah Al-Baqarah" or "Chapter 2"
+- **Search Content**: "Search for Abraham" or "Find mercy"
+- **Select Verses**: "Go to verse 2:255" (Ayat Al-Kursi)
+- **Navigation**: "Next surah" or "Previous ayah"
 
-```bash
-npm run reset-project
+### **Voice Command Examples:**
+
+```
+"Surah Al-Fatiha"     → Navigate to Surah 1
+"Chapter 2"           → Navigate to Surah 2
+"Search mercy"        → Search for "mercy" across all surahs
+"Find Abraham"        → Search for "Abraham" in all translations
+"Go to 2:255"        → Navigate to Ayat Al-Kursi
+"Next"                → Go to next surah/ayah
+"Previous"            → Go to previous surah/ayah
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🏗️ **Architecture**
 
-## Learn more
+### **Service Layer (`services/quranApi.ts`)**
+- Centralized API management
+- Voice command parsing
+- Error handling and retry logic
+- Type-safe interfaces
 
-To learn more about developing your project with Expo, look at the following resources:
+### **Components**
+- **QuranReaderScreen** - Main reading interface
+- **Surah Selector** - Dropdown with all 114 surahs
+- **Voice Controls** - Ready for voice recognition integration
+- **Theme System** - Dark/light mode with Arabic typography
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### **Data Flow**
+```
+Voice Input → Command Parser → API Service → UI Update
+     ↓              ↓            ↓          ↓
+Microphone → parseVoiceCommand → fetchSurah → Display
+```
 
-## Join the community
+## 📱 **Getting Started**
 
-Join our community of developers creating universal apps.
+### **Prerequisites**
+- Node.js (v16 or higher)
+- npm or yarn
+- Expo CLI
+- Internet connection (for API calls)
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### **Installation**
+```bash
+git clone <repository-url>
+cd Amal
+npm install
+npm start
+```
+
+### **Environment Setup**
+The app automatically connects to the Al-Quran Cloud API. No API keys required!
+
+## 🔧 **Development**
+
+### **Adding New Voice Commands**
+1. Update `parseVoiceCommand()` in `services/quranApi.ts`
+2. Add new action handlers in the main component
+3. Test with voice recognition system
+
+### **Extending API Features**
+1. Add new methods to `QuranApiService` class
+2. Update TypeScript interfaces
+3. Integrate with UI components
+
+### **Voice Recognition Integration**
+The app is designed to work with:
+- **React Native Voice** - For mobile voice recognition
+- **Web Speech API** - For web-based voice input
+- **Custom Voice Services** - Azure, Google, or AWS
+
+## 🌐 **API Editions Supported**
+
+- **Arabic Text**: `quran-uthmani` (Uthmani script)
+- **English Translations**: 
+  - `en.asad` (Muhammad Asad)
+  - `en.pickthall` (Marmaduke Pickthall)
+  - `en.yusufali` (Abdullah Yusuf Ali)
+- **Audio Recitations**: `ar.alafasy` (Mishary Alafasy)
+
+## 📊 **Performance Features**
+
+- **Lazy Loading** - Surahs loaded on demand
+- **Caching** - API responses cached for offline reading
+- **Error Handling** - Graceful fallbacks for network issues
+- **Loading States** - Smooth user experience during API calls
+
+## 🔮 **Future Enhancements**
+
+- **Offline Mode** - Download surahs for offline reading
+- **Bookmarks** - Save favorite verses and surahs
+- **Reading Progress** - Track daily reading goals
+- **Social Features** - Share verses and reading progress
+- **Advanced Search** - Search by meaning, context, or theme
+- **Audio Player** - Full audio recitation with controls
+
+## 🤝 **Contributing**
+
+1. Fork the repository
+2. Create a feature branch
+3. Implement your changes
+4. Test thoroughly with the API
+5. Submit a pull request
+
+## 📄 **License**
+
+This project is licensed under the MIT License.
+
+## 🙏 **Acknowledgments**
+
+- **Al-Quran Cloud API** - For providing free Quran data
+- **Expo Team** - For the amazing development platform
+- **React Native Community** - For continuous improvements
+
+---
+
+**Amal v2.0** - Now with real-time Quran data and voice recognition capabilities! 🎉
+
+*"Indeed, We have sent down to you the Book in truth for instructing mankind. He who receives guidance benefits his own soul, but he who strays injures his own soul."* - Quran 39:41
