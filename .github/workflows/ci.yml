@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -22,13 +26,9 @@ jobs:
         run: npm run lint
       - name: Run type checking
         run: npx tsc --noEmit
-      - name: Build web (static export)
-        run: npx expo export --platform web --output-dir dist --clear
-      - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: dist
+      # Optional build sanity check for Expo Web; keep if you like
+      - name: Build check (Expo static export)
+        run: npx expo export --platform web --clear
 
   deploy-preview:
     needs: test
@@ -36,20 +36,14 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
-      - name: Download dist
-        uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: dist
-      - name: Deploy Preview to Vercel (prebuilt)
-        uses: vercel/actions@v1
-        with:
-          token: ${{ secrets.VERCEL_TOKEN }}
-          org-id: ${{ secrets.VERCEL_ORG_ID }}
-          project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: .
-          prebuilt: true
-          prod: false
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+      - name: Pull Vercel env (preview)
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Build with Vercel (creates .vercel/output)
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy preview (prebuilt)
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
 
   deploy-production:
     needs: test
@@ -57,17 +51,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      - name: Download dist
-        uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: dist
-      - name: Deploy Production to Vercel (prebuilt)
-        uses: vercel/actions@v1
-        with:
-          token: ${{ secrets.VERCEL_TOKEN }}
-          org-id: ${{ secrets.VERCEL_ORG_ID }}
-          project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: .
-          prebuilt: true
-          prod: true
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+      - name: Pull Vercel env (production)
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Build with Vercel (prod)
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy production (prebuilt)
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
