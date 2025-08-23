@@ -14,11 +14,23 @@ import { router } from 'expo-router';
 import { resetPassword } from '../services/firebase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function ForgotPasswordScreen() {
   const colorScheme = useColorScheme();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [manualTheme, setManualTheme] = useState<'light' | 'dark' | null>(null);
+
+  // Use manual theme if set, otherwise use system theme
+  const currentTheme = manualTheme || colorScheme || 'dark';
+
+  const toggleTheme = () => {
+    console.log('🔄 Theme toggle clicked. Current theme:', currentTheme);
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    console.log('🔄 Setting new theme to:', newTheme);
+    setManualTheme(newTheme);
+  };
 
   const validateEmail = () => {
     if (!email) {
@@ -43,7 +55,7 @@ export default function ForgotPasswordScreen() {
       if (result.success) {
         Alert.alert(
           'Success',
-          'Password reset email sent! Please check your inbox.',
+          result.message || 'Password reset email sent! Please check your inbox.',
           [
             {
               text: 'OK',
@@ -52,7 +64,7 @@ export default function ForgotPasswordScreen() {
           ]
         );
       } else {
-        Alert.alert('Error', result.error);
+        Alert.alert('Error', result.message || 'Failed to send password reset email. Please try again.');
       }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred');
@@ -67,27 +79,36 @@ export default function ForgotPasswordScreen() {
 
   return (
     <LinearGradient
-      colors={colorScheme === 'dark' ? ['#0a0a0a', '#151718'] : ['#f8f6f0', '#e8e8e8']}
+      colors={currentTheme === 'dark' ? ['#0a0a0a', '#151718'] : ['#f8f6f0', '#e8e8e8']}
       style={styles.container}
     >
+      {/* Theme Toggle Button */}
+      <TouchableOpacity style={[styles.themeToggle, styles[`${currentTheme}ThemeToggle`]]} onPress={toggleTheme}>
+        <Ionicons 
+          name={currentTheme === 'light' ? 'moon' : 'sunny'} 
+          size={24} 
+          color={currentTheme === 'light' ? '#3d3d3d' : '#ffd700'} 
+        />
+      </TouchableOpacity>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.content}>
-            <Text style={styles.title}>Reset Password</Text>
-            <Text style={styles.subtitle}>
-              Enter your email address and we&apos;ll send you a link to reset your password
+            <Text style={[styles.title, styles[`${currentTheme}Title`]]}>Reset Password</Text>
+            <Text style={[styles.subtitle, styles[`${currentTheme}Subtitle`]]}>
+              Enter your email address and we'll send you a link to reset your password
             </Text>
 
-            <View style={[styles.form, { backgroundColor: colorScheme === 'dark' ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)' }]}>
+            <View style={[styles.form, styles[`${currentTheme}Form`]]}>
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={[styles.label, styles[`${currentTheme}Label`]]}>Email</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles[`${currentTheme}Input`]]}
                   placeholder="Enter your email"
-                  placeholderTextColor="#999"
+                  placeholderTextColor={currentTheme === 'light' ? '#666' : '#999'}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -110,7 +131,7 @@ export default function ForgotPasswordScreen() {
                 style={styles.backButton}
                 onPress={navigateBack}
               >
-                <Text style={[styles.backButtonText, { color: '#ffd700' }]}>Back to Sign In</Text>
+                <Text style={[styles.backButtonText, styles[`${currentTheme}BackButtonText`]]}>Back to Sign In</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -123,6 +144,20 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  themeToggle: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1000,
+    padding: 10,
+    borderRadius: 20,
+  },
+  darkThemeToggle: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  lightThemeToggle: {
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   keyboardView: {
     flex: 1,
@@ -138,16 +173,26 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: 'white',
     textAlign: 'center',
     marginBottom: 10,
   },
+  darkTitle: {
+    color: '#ffd700',
+  },
+  lightTitle: {
+    color: '#3d3d3d',
+  },
   subtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     marginBottom: 40,
     lineHeight: 22,
+  },
+  darkSubtitle: {
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  lightSubtitle: {
+    color: '#666',
   },
   form: {
     borderRadius: 20,
@@ -161,21 +206,39 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
+  darkForm: {
+    backgroundColor: 'rgba(30, 30, 30, 0.95)',
+  },
+  lightForm: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+  },
   inputContainer: {
     marginBottom: 30,
   },
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginBottom: 8,
+  },
+  darkLabel: {
+    color: '#e8e8e8',
+  },
+  lightLabel: {
+    color: '#333',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 12,
     padding: 15,
     fontSize: 16,
+  },
+  darkInput: {
+    borderColor: '#444',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    color: '#e8e8e8',
+  },
+  lightInput: {
+    borderColor: '#ddd',
     backgroundColor: 'white',
     color: '#333',
   },
@@ -199,5 +262,11 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  darkBackButtonText: {
+    color: '#ffd700',
+  },
+  lightBackButtonText: {
+    color: '#667eea',
   },
 });

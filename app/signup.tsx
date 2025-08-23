@@ -1,19 +1,19 @@
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { signUp } from '../services/firebase';
 
 export default function SignupScreen() {
   const colorScheme = useColorScheme();
@@ -21,6 +21,14 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [manualTheme, setManualTheme] = useState<'light' | 'dark' | null>(null);
+
+  // Use manual theme if set, otherwise use system theme
+  const currentTheme = manualTheme || colorScheme || 'dark';
+
+  const toggleTheme = () => {
+    setManualTheme(currentTheme === 'light' ? 'dark' : 'light');
+  };
 
   const validateForm = () => {
     if (!email || !password || !confirmPassword) {
@@ -33,8 +41,26 @@ export default function SignupScreen() {
       return false;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+    // Firebase Password Policy Requirements
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+    const isLongEnough = password.length >= 8;
+
+    let missingRequirements = [];
+    if (!hasUpperCase) missingRequirements.push('Uppercase letter (A-Z)');
+    if (!hasLowerCase) missingRequirements.push('Lowercase letter (a-z)');
+    if (!hasNumbers) missingRequirements.push('Number (0-9)');
+    if (!hasSpecialChar) missingRequirements.push('Special character (!@#$%^&*)');
+    if (!isLongEnough) missingRequirements.push('At least 8 characters');
+
+    if (missingRequirements.length > 0) {
+      Alert.alert(
+        'Password Requirements',
+        `Your password must contain:\n\n${missingRequirements.join('\n')}\n\nPlease update your password to meet these security requirements.`,
+        [{ text: 'OK' }]
+      );
       return false;
     }
 
@@ -49,26 +75,60 @@ export default function SignupScreen() {
   const handleSignup = async () => {
     if (!validateForm()) return;
 
+    console.log('=== SIGNUP PROCESS STARTED ===');
+    console.log('Email:', email);
+    console.log('Password length:', password.length);
+    console.log('Current theme:', currentTheme);
+    
     setLoading(true);
     try {
+      console.log('Calling signUp function...');
+      
+      // Import the signUp function dynamically to ensure it's available
+      const { signUp } = await import('../services/firebase');
+      console.log('signUp function imported successfully');
+      
       const result = await signUp(email, password);
+      console.log('=== SIGNUP RESULT ===');
+      console.log('Success:', result.success);
+      console.log('User object:', result.user);
+      console.log('Message:', result.message);
+      
       if (result.success) {
+        console.log('✅ Signup successful!');
+        console.log('User ID:', result.user?.uid);
+        console.log('User email:', result.user?.email);
+        console.log('Email verified:', result.user?.emailVerified);
+        
         Alert.alert(
           'Success',
-          'Account created successfully! Please sign in.',
+          result.message || 'Account created successfully! Please check your email to verify your account before signing in.',
           [
             {
               text: 'OK',
-              onPress: () => router.replace('/login'),
+              onPress: () => {
+                console.log('User clicked OK, navigating to verify-email screen...');
+                router.replace('/verify-email');
+              },
             },
           ]
         );
       } else {
-        Alert.alert('Signup Failed', result.error);
+        console.error('❌ Signup failed!');
+        console.error('Error message:', result.message);
+        Alert.alert('Signup Failed', result.message || 'Signup was not successful. Please try again.');
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      console.error('💥 UNEXPECTED SIGNUP ERROR!');
+      console.error('Error type:', typeof error);
+      console.error('Error object:', error);
+      if (error instanceof Error) {
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+      }
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
+      console.log('Signup process completed, setting loading to false');
       setLoading(false);
     }
   };
@@ -79,25 +139,34 @@ export default function SignupScreen() {
 
   return (
     <LinearGradient
-      colors={colorScheme === 'dark' ? ['#0a0a0a', '#151718'] : ['#f8f6f0', '#e8e8e8']}
+      colors={currentTheme === 'dark' ? ['#0a0a0a', '#151718'] : ['#f8f6f0', '#e8e8e8']}
       style={styles.container}
     >
+      {/* Theme Toggle Button */}
+      <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme}>
+        <Ionicons 
+          name={currentTheme === 'light' ? 'moon' : 'sunny'} 
+          size={24} 
+          color={currentTheme === 'light' ? '#3d3d3d' : '#ffd700'} 
+        />
+      </TouchableOpacity>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.content}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Sign up to get started</Text>
+            <Text style={[styles.title, styles[`${currentTheme}Title`]]}>Create Account</Text>
+            <Text style={[styles.subtitle, styles[`${currentTheme}Subtitle`]]}>Sign up to get started</Text>
 
-            <View style={[styles.form, { backgroundColor: colorScheme === 'dark' ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)' }]}>
+            <View style={[styles.form, styles[`${currentTheme}Form`]]}>
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={[styles.label, styles[`${currentTheme}Label`]]}>Email</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles[`${currentTheme}Input`]]}
                   placeholder="Enter your email"
-                  placeholderTextColor="#999"
+                  placeholderTextColor={currentTheme === 'light' ? '#666' : '#999'}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -107,25 +176,53 @@ export default function SignupScreen() {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Password</Text>
+                <Text style={[styles.label, styles[`${currentTheme}Label`]]}>Password</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles[`${currentTheme}Input`]]}
                   placeholder="Enter your password"
-                  placeholderTextColor="#999"
+                  placeholderTextColor={currentTheme === 'light' ? '#666' : '#999'}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
                   autoCapitalize="none"
                 />
-                <Text style={styles.hint}>Must be at least 6 characters</Text>
+                <Text style={[styles.hint, styles[`${currentTheme}Hint`]]}>
+                  Must contain: Uppercase, lowercase, number, special character, min 8 chars
+                </Text>
+                
+                {/* Password Strength Indicator */}
+                {password.length > 0 && (
+                  <View style={[styles.passwordStrength, styles[`${currentTheme}PasswordStrength`]]}>
+                    <Text style={[styles.strengthTitle, styles[`${currentTheme}StrengthTitle`]]}>
+                      Password Strength:
+                    </Text>
+                    <View style={styles.requirementList}>
+                      <Text style={[styles.requirement, styles[`${currentTheme}Requirement`], /[A-Z]/.test(password) ? styles.requirementMet : styles.requirementMissing]}>
+                        {/[A-Z]/.test(password) ? '✅' : '❌'} Uppercase
+                      </Text>
+                      <Text style={[styles.requirement, styles[`${currentTheme}Requirement`], /[a-z]/.test(password) ? styles.requirementMet : styles.requirementMissing]}>
+                        {/[a-z]/.test(password) ? '✅' : '❌'} Lowercase
+                      </Text>
+                      <Text style={[styles.requirement, styles[`${currentTheme}Requirement`], /\d/.test(password) ? styles.requirementMet : styles.requirementMissing]}>
+                        {/\d/.test(password) ? '✅' : '❌'} Number
+                      </Text>
+                      <Text style={[styles.requirement, styles[`${currentTheme}Requirement`], /[!@#$%^&*(),.?":{}|<>]/.test(password) ? styles.requirementMet : styles.requirementMissing]}>
+                        {/[!@#$%^&*(),.?":{}|<>]/.test(password) ? '✅' : '❌'} Special
+                      </Text>
+                      <Text style={[styles.requirement, styles[`${currentTheme}Requirement`], password.length >= 8 ? styles.requirementMet : styles.requirementMissing]}>
+                        {password.length >= 8 ? '✅' : '❌'} Length (8+)
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Confirm Password</Text>
+                <Text style={[styles.label, styles[`${currentTheme}Label`]]}>Confirm Password</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, styles[`${currentTheme}Input`]]}
                   placeholder="Confirm your password"
-                  placeholderTextColor="#999"
+                  placeholderTextColor={currentTheme === 'light' ? '#666' : '#999'}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   secureTextEntry
@@ -143,8 +240,34 @@ export default function SignupScreen() {
                 </Text>
               </TouchableOpacity>
 
+              {/* Firebase Test Button */}
+              <TouchableOpacity 
+                style={[styles.testButton, { borderColor: '#ffd700' }]}
+                onPress={async () => {
+                  console.log('🧪 Testing Firebase connection...');
+                  try {
+                    const { testConnection } = await import('../services/firebase');
+                    const result = await testConnection();
+                    console.log('🔥 Firebase test result:', result);
+                    
+                    if (result.success) {
+                      Alert.alert('Firebase Test', '✅ Firebase is working! You can now try to signup.');
+                    } else {
+                      Alert.alert('Firebase Test', '❌ Firebase connection failed. Check console for details.');
+                    }
+                  } catch (error) {
+                    console.error('❌ Firebase test failed:', error);
+                    Alert.alert('Firebase Test', '❌ Failed to test Firebase. Check console for details.');
+                  }
+                }}
+              >
+                <Text style={[styles.testButtonText, { color: '#ffd700' }]}>
+                  🧪 Test Firebase
+                </Text>
+              </TouchableOpacity>
+
               <View style={styles.loginContainer}>
-                <Text style={styles.loginText}>Already have an account? </Text>
+                <Text style={[styles.loginText, styles[`${currentTheme}LoginText`]]}>Already have an account? </Text>
                 <TouchableOpacity onPress={navigateToLogin}>
                   <Text style={[styles.loginLink, { color: '#ffd700' }]}>Sign In</Text>
                 </TouchableOpacity>
@@ -161,6 +284,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  themeToggle: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1000,
+    padding: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
   keyboardView: {
     flex: 1,
   },
@@ -175,18 +307,27 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: 'white',
     textAlign: 'center',
     marginBottom: 10,
   },
+  darkTitle: {
+    color: '#ffd700',
+  },
+  lightTitle: {
+    color: '#3d3d3d',
+  },
   subtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     marginBottom: 40,
   },
+  darkSubtitle: {
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  lightSubtitle: {
+    color: '#666',
+  },
   form: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 20,
     padding: 30,
     shadowColor: '#000',
@@ -198,32 +339,54 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
+  darkForm: {
+    backgroundColor: 'rgba(30, 30, 30, 0.95)',
+  },
+  lightForm: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+  },
   inputContainer: {
     marginBottom: 20,
   },
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginBottom: 8,
+  },
+  darkLabel: {
+    color: '#e8e8e8',
+  },
+  lightLabel: {
+    color: '#333',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 12,
     padding: 15,
     fontSize: 16,
+  },
+  darkInput: {
+    borderColor: '#444',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    color: '#e8e8e8',
+  },
+  lightInput: {
+    borderColor: '#ddd',
     backgroundColor: 'white',
     color: '#333',
   },
   hint: {
     fontSize: 12,
-    color: '#666',
     marginTop: 5,
     fontStyle: 'italic',
   },
+  darkHint: {
+    color: '#999',
+  },
+  lightHint: {
+    color: '#666',
+  },
   button: {
-    backgroundColor: '#667eea',
     borderRadius: 12,
     padding: 18,
     alignItems: 'center',
@@ -233,7 +396,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: 'white',
+    color: '#3d3d3d',
     fontSize: 18,
     fontWeight: '600',
   },
@@ -243,12 +406,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loginText: {
-    color: '#666',
     fontSize: 16,
   },
+  darkLoginText: {
+    color: '#b0b0b0',
+  },
+  lightLoginText: {
+    color: '#666',
+  },
   loginLink: {
-    color: '#667eea',
     fontSize: 16,
     fontWeight: '600',
+  },
+  testButton: {
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+    marginBottom: 25,
+    borderWidth: 2,
+  },
+  testButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  passwordStrength: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+  },
+  darkPasswordStrength: {
+    backgroundColor: 'rgba(30, 30, 30, 0.2)',
+  },
+  lightPasswordStrength: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  strengthTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  darkStrengthTitle: {
+    color: '#e8e8e8',
+  },
+  lightStrengthTitle: {
+    color: '#333',
+  },
+  requirementList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+  },
+  requirement: {
+    fontSize: 12,
+    marginHorizontal: 5,
+    marginVertical: 3,
+  },
+  darkRequirement: {
+    color: '#999',
+  },
+  lightRequirement: {
+    color: '#666',
+  },
+  requirementMet: {
+    color: '#4CAF50', // Green for met requirements
+  },
+  requirementMissing: {
+    color: '#F44336', // Red for missing requirements
   },
 });

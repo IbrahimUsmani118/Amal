@@ -1,35 +1,73 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthContext } from '@/contexts/AuthContext';
+import { auth } from '@/services/firebase';
+import { Slot, useRouter, useSegments } from 'expo-router';
+import { User, onAuthStateChanged } from 'firebase/auth';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const segments = useSegments();
+  const router = useRouter();
 
-  if (!loaded) {
-    // Async font loading only occurs in development.
-    return null;
+  useEffect(() => {
+    if (!auth) {
+      setIsLoading(false);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setIsLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === '(tabs)';
+    const currentRoute = segments[0];
+
+    // If user is not signed in, redirect to login (unless already there)
+    if (!user) {
+      if (currentRoute !== 'login' && currentRoute !== 'signup' && currentRoute !== 'forgot-password') {
+        router.replace('/login');
+      }
+      return;
+    }
+
+    // If user is signed in but email is not verified
+    if (user && !user.emailVerified) {
+      // Only redirect to verify-email if they're not already there
+      if (currentRoute !== 'verify-email') {
+        router.replace('/verify-email');
+      }
+      return;
+    }
+
+    // If user is signed in and email is verified, redirect to main app
+    if (user && user.emailVerified) {
+      if (!inAuthGroup) {
+        router.replace('/(tabs)/quran');
+      }
+    }
+  }, [user, segments, isLoading]);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f6f0' }}>
+        <ActivityIndicator size="large" color="#ffd700" />
+        <Text style={{ marginTop: 16, color: '#3d3d3d' }}>Loading...</Text>
+      </View>
+    );
   }
 
   return (
-    <AuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="login" />
-          <Stack.Screen name="signup" />
-          <Stack.Screen name="forgot-password" />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </AuthProvider>
+    <AuthContext.Provider value={{ user, setUser, loading: isLoading }}>
+      <Slot />
+    </AuthContext.Provider>
   );
 }
