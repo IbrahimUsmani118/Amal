@@ -4,17 +4,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { signIn } from '../services/firebase';
+import { signIn, testFirebaseStatus } from '../services/firebase';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
@@ -97,6 +97,18 @@ export default function LoginScreen() {
     router.push('/forgot-password');
   };
 
+  const testFirebase = async () => {
+    try {
+      console.log('🧪 Testing Firebase connection...');
+      const result = await testFirebaseStatus();
+      console.log('🧪 Test result:', result);
+      Alert.alert('Firebase Test', result.message);
+    } catch (error) {
+      console.error('🧪 Test error:', error);
+      Alert.alert('Firebase Test Error', 'Failed to test Firebase connection');
+    }
+  };
+
   return (
     <LinearGradient
       colors={currentTheme === 'dark' ? ['#0a0a0a', '#151718'] : ['#f8f6f0', '#e8e8e8']}
@@ -162,6 +174,11 @@ export default function LoginScreen() {
                 <Text style={[styles.forgotPasswordText, styles[`${currentTheme}ForgotPasswordText`]]}>
                   Forgot Password?
                 </Text>
+              </TouchableOpacity>
+
+              {/* Firebase Test Button - Remove in production */}
+              <TouchableOpacity style={styles.testButton} onPress={testFirebase}>
+                <Text style={styles.testButtonText}>Test Firebase Connection</Text>
               </TouchableOpacity>
 
               <View style={styles.signupContainer}>
@@ -323,5 +340,17 @@ const styles = StyleSheet.create({
   },
   lightThemeToggle: {
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  testButton: {
+    backgroundColor: '#4CAF50', // A green color for testing
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+  testButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
   },
 });

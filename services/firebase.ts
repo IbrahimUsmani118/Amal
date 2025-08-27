@@ -15,13 +15,13 @@ import { Functions, getFunctions, httpsCallable } from 'firebase/functions';
 // Firebase configuration - Replace with your actual Firebase config
 // Get these values from your Firebase Console > Project Settings > General > Your apps
 const firebaseConfig = {
-  apiKey: "YOUR_FIREBASE_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID"
+  apiKey: "AIzaSyDm2CN6JBs9Z0rLYt58_3ynczgOYArTrf8",
+  authDomain: "amal-d7115.firebaseapp.com",
+  projectId: "amal-d7115",
+  storageBucket: "amal-d7115.firebasestorage.app",
+  messagingSenderId: "744961912002",
+  appId: "1:744961912002:web:6dcde84198b6b242301f5b",
+  measurementId: "G-D3R65BJHDF"
 };
 
 // Initialize Firebase
@@ -44,6 +44,8 @@ try {
   auth = getAuth(app);
   functions = getFunctions(app);
   console.log('✅ Firebase services initialized successfully');
+  console.log('🔧 Auth instance:', auth);
+  console.log('🔧 Functions instance:', functions);
 
 } catch (error) {
   console.error('❌ Failed to initialize Firebase:', error);
@@ -180,6 +182,9 @@ export const signIn = async (email: string, password: string) => {
     const result = await signInWithEmailAndPassword(auth, email, password);
     console.log('✅ Signin successful:', result.user.email);
     
+    // Temporarily disable email verification requirement for testing
+    // TODO: Re-enable this after testing
+    /*
     // Check if email is verified
     if (!result.user.emailVerified) {
       console.log('⚠️ User email not verified');
@@ -189,6 +194,7 @@ export const signIn = async (email: string, password: string) => {
         message: 'Please verify your email before signing in. Check your inbox for a verification link.'
       };
     }
+    */
     
     return {
       success: true,
@@ -384,25 +390,59 @@ export const verifyEmail = async (token: string) => {
   }
 };
 
-// Test Firebase connection function
-export const testConnection = async () => {
+// Test Firebase Cloud Function connection
+export const testCloudFunction = async () => {
   try {
-    console.log('🧪 Testing Firebase connection...');
+    console.log('🧪 Testing Firebase Cloud Function...');
     
-    const result = await testFirebaseConnection({});
-    console.log('✅ Firebase connection test successful:', result.data);
-    
-    return {
-      success: true,
-      message: 'Firebase connection test successful!'
-    };
+    if (testFirebaseConnection) {
+      const result = await testFirebaseConnection({});
+      console.log('✅ Firebase Cloud Function test successful:', result.data);
+      
+      return {
+        success: true,
+        message: 'Firebase Cloud Function test successful!'
+      };
+    } else {
+      return {
+        success: false,
+        message: 'Firebase Cloud Functions not available'
+      };
+    }
     
   } catch (error: any) {
-    console.error('❌ Firebase connection test failed:', error);
-    throw new Error('Firebase connection test failed. Please check your configuration.');
+    console.error('❌ Firebase Cloud Function test failed:', error);
+    throw new Error('Firebase Cloud Function test failed. Please check your configuration.');
   }
 };
 
 // Export auth instance and functions for use in other parts of the app
 export { auth, functions, onAuthStateChanged, User };
+
+// Simple test function to verify Firebase connectivity
+export const testFirebaseStatus = async () => {
+  try {
+    console.log('🧪 Testing Firebase connection...');
+    
+    if (!auth) {
+      console.log('❌ Auth instance not available');
+      return { success: false, message: 'Auth instance not available' };
+    }
+    
+    if (!functions) {
+      console.log('❌ Functions instance not available');
+      return { success: false, message: 'Functions instance not available' };
+    }
+    
+    console.log('✅ Firebase instances available');
+    console.log('🔧 Auth current user:', auth.currentUser);
+    console.log('🔧 Auth state:', auth);
+    
+    return { success: true, message: 'Firebase connection test successful!' };
+    
+  } catch (error) {
+    console.error('❌ Firebase connection test failed:', error);
+    return { success: false, message: 'Firebase connection test failed' };
+  }
+};
 

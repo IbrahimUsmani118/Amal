@@ -8,8 +8,22 @@ export default function IndexScreen() {
   const colorScheme = useColorScheme();
   const { user, loading: authLoading } = useAuth();
   const [redirectAttempts, setRedirectAttempts] = useState(0);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Mark component as mounted
+  useEffect(() => {
+    // Small delay to ensure proper mounting
+    const timer = setTimeout(() => {
+      setIsMounted(true);
+    }, 200);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
+    // Don't navigate until component is mounted
+    if (!isMounted) return;
+    
     console.log('=== INDEX SCREEN MOUNTED ===');
     console.log('Color scheme:', colorScheme);
     console.log('Auth loading:', authLoading);
@@ -20,27 +34,36 @@ export default function IndexScreen() {
       console.log('Email verified:', user.emailVerified);
     }
     
-    // Skip Firebase loading and go straight to login
-    if (user && user.emailVerified) {
-      console.log('🎉 User verified, going to main app...');
-      router.replace('/(tabs)/quran' as any);
-    } else if (user && !user.emailVerified) {
-      console.log('⚠️ User not verified, going to verify-email...');
-      router.replace('/verify-email');
-    } else {
-      console.log('🚫 No user, going straight to login...');
-      router.replace('/login');
-    }
-  }, [user, authLoading]);
+    // Add a small delay to ensure navigation is safe
+    const navigationTimer = setTimeout(() => {
+      // Skip Firebase loading and go straight to login
+      if (user && user.emailVerified) {
+        console.log('🎉 User verified, going to main app...');
+        router.replace('/(tabs)/quran' as any);
+      } else if (user && !user.emailVerified) {
+        console.log('⚠️ User not verified, going to verify-email...');
+        router.replace('/verify-email');
+      } else {
+        console.log('🚫 No user, going straight to login...');
+        router.replace('/login');
+      }
+    }, 100);
+    
+    return () => clearTimeout(navigationTimer);
+  }, [user, authLoading, isMounted]);
 
   // Add a manual retry mechanism
   const handleRetry = () => {
+    if (!isMounted) return;
+    
     console.log('🔄 Manual retry triggered');
     setRedirectAttempts(prev => prev + 1);
     console.log('Retry attempt:', redirectAttempts + 1);
     
     // Force a re-render and retry
     setTimeout(() => {
+      if (!isMounted) return;
+      
       console.log('Executing retry navigation...');
       if (user) {
         if (user.emailVerified) {
@@ -59,6 +82,8 @@ export default function IndexScreen() {
 
   // Skip Firebase and go directly to login if user wants
   const handleSkipAuth = () => {
+    if (!isMounted) return;
+    
     console.log('⏭️ User chose to skip authentication');
     router.replace('/login' as any);
   };
@@ -68,20 +93,22 @@ export default function IndexScreen() {
     <View style={[styles.container, styles[colorScheme || 'dark']]}>
       <ActivityIndicator size="large" color={colorScheme === 'light' ? '#3d3d3d' : '#ffd700'} />
       <Text style={[styles.loadingText, styles[`${colorScheme || 'dark'}LoadingText`]]}>
-        Loading...
+        {isMounted ? 'Loading...' : 'Initializing...'}
       </Text>
       <Text style={[styles.subText, styles[`${colorScheme || 'dark'}SubText`]]}>
-        Redirecting to login...
+        {isMounted ? 'Redirecting to login...' : 'Please wait...'}
       </Text>
       
-      <TouchableOpacity 
-        style={[styles.retryButton, styles[`${colorScheme || 'dark'}RetryButton`]]}
-        onPress={handleSkipAuth}
-      >
-        <Text style={[styles.retryButtonText, styles[`${colorScheme || 'dark'}RetryButtonText`]]}>
-          Go to Login Now
-        </Text>
-      </TouchableOpacity>
+      {isMounted && (
+        <TouchableOpacity 
+          style={[styles.retryButton, styles[`${colorScheme || 'dark'}RetryButton`]]}
+          onPress={handleSkipAuth}
+        >
+          <Text style={[styles.retryButtonText, styles[`${colorScheme || 'dark'}RetryButtonText`]]}>
+            Go to Login Now
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

@@ -1,91 +1,238 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  StatusBar,
-} from 'react-native';
+import LocationSelector from '@/components/LocationSelector';
+import UniversalHeader from '@/components/UniversalHeader';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { PrayerTime, prayerTimeApi } from '@/services/prayerTimeApi';
+import { Location } from '@/types/common';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/contexts/AuthContext';
-import { router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function PrayerTimesScreen() {
   const colorScheme = useColorScheme();
-  const { user } = useAuth();
-  const [isLightMode, setIsLightMode] = useState(false);
-  const theme = isLightMode ? 'light' : 'dark';
+  const theme = colorScheme || 'dark';
+  const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
+  const [prayerTimes, setPrayerTimes] = useState<PrayerTime[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [nextPrayer, setNextPrayer] = useState<PrayerTime | null>(null);
+  const [timeUntilNext, setTimeUntilNext] = useState<{ hours: number; minutes: number } | null>(null);
 
-  // Mock prayer times data - replace with actual API call
-  const prayerTimes = [
-    { name: 'Fajr', time: '5:30 AM', icon: 'sunny-outline' },
-    { name: 'Dhuhr', time: '12:30 PM', icon: 'sunny' },
-    { name: 'Asr', time: '3:45 PM', icon: 'partly-sunny' },
-    { name: 'Maghrib', time: '6:15 PM', icon: 'moon-outline' },
-    { name: 'Isha', time: '7:45 PM', icon: 'moon' },
-  ];
+  // Set default location on component mount
+  useEffect(() => {
+    if (!currentLocation) {
+      setCurrentLocation({ city: 'Istanbul', country: 'Turkey' });
+    }
+  }, []);
 
-  const toggleTheme = () => setIsLightMode(!isLightMode);
+  // Fetch prayer times when location changes
+  useEffect(() => {
+    if (currentLocation) {
+      fetchPrayerTimes();
+    }
+  }, [currentLocation]);
+
+  // Update next prayer and countdown every minute
+  useEffect(() => {
+    if (prayerTimes.length > 0) {
+      updateNextPrayer();
+      const interval = setInterval(updateNextPrayer, 60000); // Update every minute
+      return () => clearInterval(interval);
+    }
+  }, [prayerTimes]);
+
+  const fetchPrayerTimes = async () => {
+    if (!currentLocation) return;
+
+    setLoading(true);
+    try {
+      const response = await prayerTimeApi.getPrayerTimes(currentLocation.city, currentLocation.country);
+      setPrayerTimes(response.result.times);
+      console.log('Prayer times fetched:', response.result);
+    } catch (error) {
+      console.error('Error fetching prayer times:', error);
+      Alert.alert(
+        'Error',
+        'Failed to fetch prayer times. Please check your internet connection and try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateNextPrayer = () => {
+    if (prayerTimes.length === 0) return;
+
+    const next = prayerTimeApi.getNextPrayer(prayerTimes);
+    setNextPrayer(next);
+    
+    const timeUntil = prayerTimeApi.getTimeUntilNextPrayer(prayerTimes);
+    setTimeUntilNext(timeUntil);
+  };
+
+  const handleLocationSelect = (location: Location) => {
+    setCurrentLocation(location);
+    setPrayerTimes([]);
+    setNextPrayer(null);
+    setTimeUntilNext(null);
+  };
+
+  const getThemeColors = () => {
+    if (theme === 'light') {
+      return {
+        background: '#f8f6f0',
+        surface: '#ffffff',
+        text: '#3d3d3d',
+        textSecondary: '#666666',
+        primary: '#007bff',
+        accent: '#28a745',
+        border: '#e0e0e0',
+      };
+    }
+    return {
+      background: '#0a0a0a',
+      surface: '#1a1a1a',
+      text: '#ffffff',
+      textSecondary: '#b0b0b0',
+      primary: '#ffd700',
+      accent: '#28a745',
+      border: '#404040',
+    };
+  };
+
+  const colors = getThemeColors();
 
   return (
-    <View style={[styles.container, styles[theme]]}>
-      <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Universal Header */}
+      <UniversalHeader />
       
-      {/* Header */}
-      <View style={[styles.header, styles[`${theme}Header`]]}>
-        <Text style={[styles.title, styles[`${theme}Title`]]}>Prayer Times</Text>
-        <Text style={[styles.subtitle, styles[`${theme}Subtitle`]]}>
-          Daily prayer schedule
-        </Text>
-      </View>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Page Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: colors.text }]}>
+            Prayer Times
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            {currentLocation ? `${currentLocation.city}, ${currentLocation.country}` : 'Select your location'}
+          </Text>
+        </View>
 
-      {/* Theme Toggle */}
-      <TouchableOpacity style={[styles.themeToggle, styles[`${theme}ThemeToggle`]]} onPress={toggleTheme}>
-        <Ionicons 
-          name={theme === 'light' ? 'moon' : 'sunny'} 
-          size={24} 
-          color={theme === 'light' ? '#3d3d3d' : '#ffd700'} 
+        {/* Location Selector */}
+        <LocationSelector
+          currentLocation={currentLocation}
+          onLocationSelect={handleLocationSelect}
+          theme={theme}
         />
-      </TouchableOpacity>
 
-      {/* Prayer Times List */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {prayerTimes.map((prayer, index) => (
-          <View key={prayer.name} style={[styles.prayerCard, styles[`${theme}PrayerCard`]]}>
-            <View style={styles.prayerInfo}>
-              <Ionicons 
-                name={prayer.icon as any} 
-                size={32} 
-                color={theme === 'light' ? '#3d3d3d' : '#ffd700'} 
-              />
-              <View style={styles.prayerText}>
-                <Text style={[styles.prayerName, styles[`${theme}PrayerName`]]}>
-                  {prayer.name}
+        {/* Next Prayer Highlight */}
+        {nextPrayer && timeUntilNext && (
+          <View style={[styles.nextPrayerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.nextPrayerTitle, { color: colors.text }]}>
+              Next Prayer
+            </Text>
+            <View style={styles.nextPrayerContent}>
+              <View style={styles.nextPrayerInfo}>
+                <Text style={[styles.nextPrayerName, { color: colors.primary }]}>
+                  {prayerTimeApi.getPrayerNameArabic(nextPrayer.name)}
                 </Text>
-                <Text style={[styles.prayerTime, styles[`${theme}PrayerTime`]]}>
-                  {prayer.time}
+                <Text style={[styles.nextPrayerNameEnglish, { color: colors.text }]}>
+                  {nextPrayer.name}
+                </Text>
+                <Text style={[styles.nextPrayerTime, { color: colors.text }]}>
+                  {prayerTimeApi.formatPrayerTime(nextPrayer.time)}
+                </Text>
+              </View>
+              <View style={styles.countdownContainer}>
+                <Text style={[styles.countdownLabel, { color: colors.textSecondary }]}>
+                  Time Remaining
+                </Text>
+                <Text style={[styles.countdownTime, { color: colors.accent }]}>
+                  {timeUntilNext.hours}h {timeUntilNext.minutes}m
                 </Text>
               </View>
             </View>
-            <TouchableOpacity style={[styles.notifyButton, styles[`${theme}NotifyButton`]]}>
-              <Ionicons name="notifications-outline" size={20} color={theme === 'light' ? '#3d3d3d' : '#ffd700'} />
+          </View>
+        )}
+
+        {/* Prayer Times List */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+              Loading prayer times...
+            </Text>
+          </View>
+        ) : prayerTimes.length > 0 ? (
+          <View style={styles.prayerTimesContainer}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Today's Prayer Times
+            </Text>
+            {prayerTimes.map((prayer, index) => (
+              <View
+                key={`${prayer.name}-${index}`}
+                style={[
+                  styles.prayerTimeItem,
+                  { 
+                    backgroundColor: colors.surface, 
+                    borderColor: colors.border,
+                    borderLeftColor: nextPrayer?.name === prayer.name ? colors.accent : colors.border,
+                    borderLeftWidth: nextPrayer?.name === prayer.name ? 4 : 1,
+                  }
+                ]}
+              >
+                <View style={styles.prayerTimeLeft}>
+                  <Text style={[styles.prayerName, { color: colors.text }]}>
+                    {prayerTimeApi.getPrayerNameArabic(prayer.name)}
+                  </Text>
+                  <Text style={[styles.prayerNameEnglish, { color: colors.textSecondary }]}>
+                    {prayer.name}
+                  </Text>
+                </View>
+                <View style={styles.prayerTimeRight}>
+                  <Text style={[styles.prayerTime, { color: colors.primary }]}>
+                    {prayerTimeApi.formatPrayerTime(prayer.time)}
+                  </Text>
+                  {nextPrayer?.name === prayer.name && (
+                    <View style={[styles.nextIndicator, { backgroundColor: colors.accent }]}>
+                      <Text style={styles.nextIndicatorText}>Next</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : currentLocation ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="time-outline" size={48} color={colors.textSecondary} />
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No prayer times available
+            </Text>
+            <TouchableOpacity
+              style={[styles.retryButton, { backgroundColor: colors.primary }]}
+              onPress={fetchPrayerTimes}
+            >
+              <Text style={[styles.retryButtonText, { color: colors.surface }]}>
+                Try Again
+              </Text>
             </TouchableOpacity>
           </View>
-        ))}
-
-        {/* Location Info */}
-        <View style={[styles.locationCard, styles[`${theme}LocationCard`]]}>
-          <Ionicons name="location-outline" size={24} color={theme === 'light' ? '#3d3d3d' : '#ffd700'} />
-          <Text style={[styles.locationText, styles[`${theme}LocationText`]]}>
-            Current Location: New York, NY
-          </Text>
-          <TouchableOpacity style={[styles.changeLocationButton, styles[`${theme}ChangeLocationButton`]]}>
-            <Text style={styles.changeLocationText}>Change</Text>
-          </TouchableOpacity>
-        </View>
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="location-outline" size={48} color={colors.textSecondary} />
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              Please select a location to view prayer times
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -94,13 +241,10 @@ export default function PrayerTimesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingTop: Platform.OS === 'ios' ? 10 : 10, // Same as Quran page
   },
-  dark: {
-    backgroundColor: '#0a0a0a',
-  },
-  light: {
-    backgroundColor: '#f8f6f0',
+  scrollView: {
+    flex: 1,
   },
   header: {
     alignItems: 'center',
@@ -109,146 +253,137 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     marginBottom: 30,
   },
-  darkHeader: {
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  lightHeader: {
-    borderBottomColor: 'rgba(60, 60, 60, 0.15)',
-  },
   title: {
     fontSize: 32,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#ffd700',
   },
   subtitle: {
     fontSize: 16,
     fontWeight: '300',
-    color: '#b0b0b0',
   },
-  themeToggle: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 25,
-    padding: 12,
-    width: 50,
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
+  nextPrayerCard: {
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
   },
-  darkThemeToggle: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  nextPrayerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 15,
   },
-  lightThemeToggle: {
-    backgroundColor: 'rgba(60, 60, 60, 0.1)',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  prayerCard: {
+  nextPrayerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 15,
-    borderWidth: 1,
   },
-  darkPrayerCard: {
-    backgroundColor: '#1a1a1a',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  lightPrayerCard: {
-    backgroundColor: '#fefdfb',
-    borderColor: 'rgba(60, 60, 60, 0.1)',
-  },
-  prayerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  nextPrayerInfo: {
     flex: 1,
   },
-  prayerText: {
-    marginLeft: 20,
-  },
-  prayerName: {
-    fontSize: 20,
-    fontWeight: '600',
+  nextPrayerName: {
+    fontSize: 24,
+    fontWeight: '700',
     marginBottom: 4,
   },
-  darkPrayerName: {
-    color: '#e8e8e8',
-  },
-  lightPrayerName: {
-    color: '#3d3d3d',
-  },
-  prayerTime: {
-    fontSize: 16,
+  nextPrayerNameEnglish: {
+    fontSize: 18,
     fontWeight: '400',
   },
-  darkPrayerTime: {
-    color: '#b0b0b0',
+  nextPrayerTime: {
+    fontSize: 28,
+    fontWeight: '700',
   },
-  lightPrayerTime: {
-    color: '#6a6a6a',
-  },
-  notifyButton: {
-    padding: 12,
-    borderRadius: 25,
-    borderWidth: 1,
-  },
-  darkNotifyButton: {
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  lightNotifyButton: {
-    borderColor: 'rgba(60, 60, 60, 0.2)',
-    backgroundColor: 'rgba(60, 60, 60, 0.1)',
-  },
-  locationCard: {
-    flexDirection: 'row',
+  countdownContainer: {
     alignItems: 'center',
-    padding: 20,
-    borderRadius: 15,
+  },
+  countdownLabel: {
+    fontSize: 14,
+    marginBottom: 5,
+  },
+  countdownTime: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  prayerTimesContainer: {
+    paddingHorizontal: 20,
     marginBottom: 30,
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    marginBottom: 15,
+  },
+  prayerTimeItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 10,
     borderWidth: 1,
   },
-  darkLocationCard: {
-    backgroundColor: '#1a1a1a',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  lightLocationCard: {
-    backgroundColor: '#fefdfb',
-    borderColor: 'rgba(60, 60, 60, 0.1)',
-  },
-  locationText: {
+  prayerTimeLeft: {
     flex: 1,
-    marginLeft: 15,
-    fontSize: 16,
   },
-  darkLocationText: {
-    color: '#e8e8e8',
-  },
-  lightLocationText: {
-    color: '#3d3d3d',
-  },
-  changeLocationButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: '#ffd700',
-  },
-  darkChangeLocationButton: {
-    backgroundColor: '#ffd700',
-  },
-  lightChangeLocationButton: {
-    backgroundColor: '#ffd700',
-  },
-  changeLocationText: {
-    color: '#1a1a2e',
+  prayerName: {
+    fontSize: 18,
     fontWeight: '600',
+    marginBottom: 2,
+  },
+  prayerNameEnglish: {
     fontSize: 14,
+    fontWeight: '400',
+  },
+  prayerTimeRight: {
+    alignItems: 'flex-end',
+  },
+  prayerTime: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  nextIndicator: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+  },
+  nextIndicatorText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    marginTop: 10,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  emptyText: {
+    fontSize: 18,
+    marginTop: 15,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

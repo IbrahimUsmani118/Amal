@@ -1,6 +1,6 @@
+import UniversalHeader from '@/components/UniversalHeader';
 import { useAuth } from '@/contexts/AuthContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { logout } from '@/services/firebase';
+import { useTheme } from '@/contexts/ThemeContext';
 import quranApiService, { Surah } from '@/services/quranApi';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -140,9 +140,8 @@ const SURAHS = [
 ];
 
 export default function QuranReaderScreen() {
-  const colorScheme = useColorScheme();
   const { user, loading: authLoading } = useAuth();
-  const [isLightMode, setIsLightMode] = useState(false);
+  const { theme } = useTheme();
   const [currentMode, setCurrentMode] = useState('reading');
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [selectedSurah, setSelectedSurah] = useState(1);
@@ -157,17 +156,7 @@ export default function QuranReaderScreen() {
     ayahText: string;
   } | null>(null);
 
-  const theme = isLightMode ? 'light' : 'dark';
 
-  // Handle logout
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.replace('/login' as any);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to logout');
-    }
-  };
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -256,7 +245,6 @@ export default function QuranReaderScreen() {
     fetchSurah(1); // Load Al-Fatiha by default
   }, []);
 
-  const toggleTheme = () => setIsLightMode(!isLightMode);
   const toggleMode = (mode: string) => setCurrentMode(mode);
   const toggleVoice = () => {
     if (isVoiceActive) {
@@ -299,27 +287,8 @@ export default function QuranReaderScreen() {
     <View style={[styles.container, styles[theme]]}>
       <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} />
       
-      {/* Compact Header */}
-      <View style={[styles.header, styles[`${theme}Header`]]}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.title, styles[`${theme}Title`]]}>أمال</Text>
-          <Text style={[styles.subtitle, styles[`${theme}Subtitle`]]}>
-            Enhanced Quran Reader
-          </Text>
-        </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={20} color={theme === 'light' ? '#3d3d3d' : '#ffd700'} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Theme Toggle */}
-      <TouchableOpacity style={[styles.themeToggle, styles[`${theme}ThemeToggle`]]} onPress={toggleTheme}>
-        <Ionicons 
-          name={theme === 'light' ? 'moon' : 'sunny'} 
-          size={24} 
-          color={theme === 'light' ? '#3d3d3d' : '#ffd700'} 
-        />
-      </TouchableOpacity>
+      {/* Universal Header */}
+      <UniversalHeader />
 
       {/* Controls */}
       <View style={styles.controls}>
@@ -505,61 +474,69 @@ export default function QuranReaderScreen() {
       </Modal>
 
       {/* Book Container */}
-      <View style={styles.bookContainer}>
+      <ScrollView 
+        style={styles.pageContainer} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.pageContent}
+      >
         <View style={[styles.book, styles[`${theme}Book`]]}>
-          <ScrollView 
-            style={styles.page} 
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.pageContent}
-          >
-            {currentSurah && (
-              <>
-                {/* Surah Header */}
-                <View style={[styles.surahHeader, styles[`${theme}SurahHeader`]]}>
-                  <Text style={[styles.surahName, styles[`${theme}SurahName`]]}>
-                    {currentSurah.name}
-                  </Text>
-                  <Text style={[styles.surahNameTranslated, styles[`${theme}SurahNameTranslated`]]}>
-                    {currentSurah.nameTranslated}
-                  </Text>
-                  <Text style={[styles.surahNameEnglish, styles[`${theme}SurahNameEnglish`]]}>
-                    {currentSurah.nameEnglish}
-                  </Text>
-                  <Text style={[styles.surahInfo, styles[`${theme}SurahInfo`]]}>
-                    {currentSurah.totalAyahs} Verses
-                  </Text>
-                </View>
+          {currentSurah && (
+            <>
+              {/* Surah Header */}
+              <View style={[styles.surahHeader, styles[`${theme}SurahHeader`]]}>
+                <Text style={[styles.surahName, styles[`${theme}SurahName`]]}>
+                  {currentSurah.name}
+                </Text>
+                <Text style={[styles.surahNameTranslated, styles[`${theme}SurahNameTranslated`]]}>
+                  {currentSurah.nameTranslated}
+                </Text>
+                <Text style={[styles.surahNameEnglish, styles[`${theme}SurahNameEnglish`]]}>
+                  {currentSurah.nameEnglish}
+                </Text>
+                <Text style={[styles.surahInfo, styles[`${theme}SurahInfo`]]}>
+                  {currentSurah.totalAyahs} Verses
+                </Text>
+              </View>
 
-                {/* Bismillah */}
-                <View style={styles.bismillahContainer}>
-                  <Text style={[styles.bismillah, styles[`${theme}Bismillah`]]}>
-                    بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-                  </Text>
-                </View>
+              {/* Bismillah */}
+              <View style={styles.bismillahContainer}>
+                <Text style={[styles.bismillah, styles[`${theme}Bismillah`]]}>
+                  بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+                </Text>
+              </View>
 
-                {/* Verses */}
-                {currentSurah.ayahs.map((ayah) => (
-                  <View key={ayah.number} style={styles.verseContainer}>
-                    <View style={styles.verseHeader}>
-                      <View style={[styles.verseNumber, styles[`${theme}VerseNumber`]]}>
-                        <Text style={[styles.verseNumberText, styles[`${theme}VerseNumberText`]]}>
-                          {ayah.number}
-                        </Text>
-                      </View>
+              {/* Verses */}
+              {currentSurah.ayahs.map((ayah) => (
+                <View key={ayah.number} style={styles.verseContainer}>
+                  <View style={styles.verseHeader}>
+                    <View style={[styles.verseNumber, styles[`${theme}VerseNumber`]]}>
+                      <Text style={[styles.verseNumberText, styles[`${theme}VerseNumberText`]]}>
+                        {ayah.number}
+                      </Text>
                     </View>
-                    <Text style={[styles.verseArabic, styles[`${theme}VerseArabic`]]}>
-                      {ayah.text}
-                    </Text>
-                    <Text style={[styles.verseTranslation, styles[`${theme}VerseTranslation`]]}>
-                      {ayah.translation}
-                    </Text>
                   </View>
-                ))}
-              </>
-            )}
-          </ScrollView>
+                  <Text style={[styles.verseArabic, styles[`${theme}VerseArabic`]]}>
+                    {ayah.text}
+                  </Text>
+                  <Text style={[styles.verseTranslation, styles[`${theme}VerseTranslation`]]}>
+                    {ayah.translation}
+                  </Text>
+                </View>
+              ))}
+            </>
+          )}
         </View>
-      </View>
+
+        {/* Footer */}
+        <View style={[styles.footer, styles[`${theme}Footer`]]}>
+          <Text style={[styles.footerText, styles[`${theme}FooterText`]]}>
+            أمال - AMAL Enhanced Quran Reader
+          </Text>
+          <Text style={[styles.footerSubtext, styles[`${theme}FooterSubtext`]]}>
+            May Allah guide us all to the straight path
+          </Text>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -567,7 +544,7 @@ export default function QuranReaderScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+     paddingTop: Platform.OS === 'ios' ? 10 : 10, // Reduced since we have tab navigation above
   },
   dark: {
     backgroundColor: '#0a0a0a',
@@ -593,13 +570,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 15,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     marginBottom: 20,
   },
   headerLeft: {
     alignItems: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
   },
   logoutButton: {
     flexDirection: 'row',
@@ -644,9 +626,6 @@ const styles = StyleSheet.create({
     color: '#6a6a6a',
   },
   themeToggle: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 25,
     padding: 12,
@@ -1016,19 +995,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  bookContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 500,
-  },
   book: {
     width: '100%',
     maxWidth: 900,
-    height: '100%',
     borderRadius: 15,
     padding: 30,
     borderWidth: 1,
+    marginBottom: 100, // Space for footer
+    alignSelf: 'center',
+    marginHorizontal: 'auto',
   },
   darkBook: {
     backgroundColor: '#1a1a1a',
@@ -1038,17 +1013,62 @@ const styles = StyleSheet.create({
     backgroundColor: '#fefdfb',
     borderColor: 'rgba(60, 60, 60, 0.1)',
   },
-  page: {
+  pageContent: {
+    paddingBottom: 120, // Add extra padding for footer
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  pageContainer: {
     flex: 1,
   },
-  pageContent: {
-    paddingBottom: 100, // Add extra padding for better scrolling
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  darkFooter: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  lightFooter: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderTopColor: 'rgba(60, 60, 60, 0.15)',
+  },
+  footerText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#ffffff',
+  },
+  darkFooterText: {
+    color: '#ffffff',
+  },
+  lightFooterText: {
+    color: '#3d3d3d',
+  },
+  footerSubtext: {
+    fontSize: 12,
+    fontWeight: '300',
+    color: '#b0b0b0',
+    marginTop: 5,
+  },
+  darkFooterSubtext: {
+    color: '#b0b0b0',
+  },
+  lightFooterSubtext: {
+    color: '#6a6a6a',
   },
   surahHeader: {
     alignItems: 'center',
     marginBottom: 40,
     paddingBottom: 25,
     borderBottomWidth: 2,
+    width: '100%',
   },
   darkSurahHeader: {
     borderBottomColor: 'rgba(255, 215, 0, 0.3)',
@@ -1118,11 +1138,14 @@ const styles = StyleSheet.create({
   },
   verseContainer: {
     marginBottom: 25,
+    width: '100%',
+    alignItems: 'center',
   },
   verseHeader: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     marginBottom: 12,
+    width: '100%',
   },
   verseNumber: {
     width: 35,
@@ -1151,9 +1174,10 @@ const styles = StyleSheet.create({
   verseArabic: {
     fontSize: 20,
     fontFamily: Platform.OS === 'ios' ? 'Amiri' : 'serif',
-    textAlign: 'right',
+    textAlign: 'center',
     lineHeight: 36,
     marginBottom: 12,
+    width: '100%',
   },
   darkVerseArabic: {
     color: '#e8e8e8',

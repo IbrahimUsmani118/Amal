@@ -2,6 +2,8 @@
 #
 .DS_Store
 
+services/firebase.ts
+
 # Xcode
 #
 build/

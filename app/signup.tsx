@@ -4,15 +4,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 export default function SignupScreen() {
@@ -246,8 +246,8 @@ export default function SignupScreen() {
                 onPress={async () => {
                   console.log('🧪 Testing Firebase connection...');
                   try {
-                    const { testConnection } = await import('../services/firebase');
-                    const result = await testConnection();
+                    const { testFirebaseStatus } = await import('../services/firebase');
+                    const result = await testFirebaseStatus();
                     console.log('🔥 Firebase test result:', result);
                     
                     if (result.success) {
