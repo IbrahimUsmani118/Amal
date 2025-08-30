@@ -28,9 +28,72 @@ export default function PrayerTimesScreen() {
   // Set default location on component mount
   useEffect(() => {
     if (!currentLocation) {
-      setCurrentLocation({ city: 'Istanbul', country: 'Turkey' });
+      getUserLocation();
     }
   }, []);
+
+  const getUserLocation = async () => {
+    try {
+      // Try to get user's current location
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000
+        });
+      });
+
+      // Use coordinates to get location info
+      const { latitude, longitude } = position.coords;
+      
+      try {
+        // Try to get prayer times by coordinates first
+        const response = await prayerTimeApi.getPrayerTimesByCoordinates(latitude, longitude);
+        if (response.success) {
+          setCurrentLocation({
+            city: response.result.city,
+            country: response.result.country
+          });
+          return;
+        }
+      } catch (error) {
+        console.log('Could not get location by coordinates, falling back to default');
+      }
+
+      // Fallback to a reasonable default based on user's timezone
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const defaultLocation = getDefaultLocationByTimezone(timezone);
+      setCurrentLocation(defaultLocation);
+      
+    } catch (error) {
+      console.log('Could not get user location, using fallback');
+      // Fallback to a reasonable default
+      setCurrentLocation({ city: 'Mecca', country: 'Saudi Arabia' });
+    }
+  };
+
+  const getDefaultLocationByTimezone = (timezone: string): Location => {
+    // Map common timezones to appropriate cities
+    const timezoneMap: { [key: string]: Location } = {
+      'America/New_York': { city: 'New York', country: 'USA' },
+      'America/Chicago': { city: 'Chicago', country: 'USA' },
+      'America/Denver': { city: 'Denver', country: 'USA' },
+      'America/Los_Angeles': { city: 'Los Angeles', country: 'USA' },
+      'Europe/London': { city: 'London', country: 'UK' },
+      'Europe/Paris': { city: 'Paris', country: 'France' },
+      'Europe/Berlin': { city: 'Berlin', country: 'Germany' },
+      'Asia/Dubai': { city: 'Dubai', country: 'UAE' },
+      'Asia/Karachi': { city: 'Karachi', country: 'Pakistan' },
+      'Asia/Dhaka': { city: 'Dhaka', country: 'Bangladesh' },
+      'Asia/Kolkata': { city: 'Mumbai', country: 'India' },
+      'Asia/Shanghai': { city: 'Shanghai', country: 'China' },
+      'Asia/Tokyo': { city: 'Tokyo', country: 'Japan' },
+      'Australia/Sydney': { city: 'Sydney', country: 'Australia' },
+      'Pacific/Auckland': { city: 'Auckland', country: 'New Zealand' },
+    };
+
+    return timezoneMap[timezone] || { city: 'Mecca', country: 'Saudi Arabia' };
+  };
 
   // Fetch prayer times when location changes
   useEffect(() => {

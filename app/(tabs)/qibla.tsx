@@ -29,15 +29,62 @@ export default function QiblaScreen() {
   const [deviceHeading, setDeviceHeading] = useState(0);
   const [hasLocationPermission, setHasLocationPermission] = useState(false);
   const [magnetometerData, setMagnetometerData] = useState({ x: 0, y: 0, z: 0 });
+  const [compassActive, setCompassActive] = useState(false);
   
   const compassRotationAnim = useRef(new Animated.Value(0)).current;
+  const qiblaDirectionRef = useRef<QiblaDirection | null>(null);
   const { width: screenWidth } = Dimensions.get('window');
   const compassSize = Math.min(screenWidth * 0.8, 300);
 
   // Set default location on component mount
   useEffect(() => {
     if (!currentLocation) {
-      // Default to Mecca coordinates
+      getUserLocation();
+    }
+  }, []);
+
+  const getUserLocation = async () => {
+    try {
+      // Check if we have location permission first
+      const { status } = await ExpoLocation.getForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        // Request permission if not granted
+        const { status: newStatus } = await ExpoLocation.requestForegroundPermissionsAsync();
+        if (newStatus !== 'granted') {
+          console.log('Location permission denied');
+          setHasLocationPermission(false);
+          // Fallback to Mecca coordinates
+          setCurrentLocation({
+            coords: {
+              latitude: 21.4225,
+              longitude: 39.8262,
+              altitude: null,
+              accuracy: null,
+              altitudeAccuracy: null,
+              heading: null,
+              speed: null
+            },
+            timestamp: Date.now()
+          });
+          return;
+        }
+      }
+
+      setHasLocationPermission(true);
+      
+      // Get current location using Expo Location
+      const location = await ExpoLocation.getCurrentPositionAsync({
+        accuracy: ExpoLocation.Accuracy.High,
+      });
+
+      setCurrentLocation(location);
+      console.log('Current location obtained:', location);
+      
+    } catch (error) {
+      console.log('Could not get user location, using Mecca as fallback:', error);
+      setHasLocationPermission(false);
+      // Fallback to Mecca coordinates
       setCurrentLocation({
         coords: {
           latitude: 21.4225,
@@ -51,7 +98,7 @@ export default function QiblaScreen() {
         timestamp: Date.now()
       });
     }
-  }, []);
+  };
 
   // Fetch qibla direction when location changes
   useEffect(() => {
@@ -62,31 +109,47 @@ export default function QiblaScreen() {
 
   // Start compass updates when qibla direction is available
   useEffect(() => {
-    if (qiblaDirection && hasLocationPermission) {
+    if (qiblaDirection && hasLocationPermission && !compassActive) {
       startCompassUpdates();
     }
     return () => {
       // Cleanup compass updates
-      Magnetometer.removeAllListeners();
+      if (compassActive) {
+        stopCompassUpdates();
+      }
     };
-  }, [qiblaDirection, hasLocationPermission]);
+  }, [qiblaDirection, hasLocationPermission, compassActive]);
 
   const fetchQiblaDirection = async () => {
     if (!currentLocation) return;
 
     setLoading(true);
     try {
+      console.log('Fetching qibla direction for coordinates:', {
+        lat: currentLocation.coords.latitude,
+        lng: currentLocation.coords.longitude
+      });
+
       const response = await qiblaApi.getQiblaDirection(
         currentLocation.coords.latitude, 
         currentLocation.coords.longitude
       );
-      setQiblaDirection(response);
-      console.log('Qibla direction fetched:', response);
+      
+      console.log('Qibla direction API response:', response);
+      
+      if (response && response.data && typeof response.data.qibla_direction === 'number') {
+        setQiblaDirection(response);
+        qiblaDirectionRef.current = response;
+        console.log('Qibla direction set successfully:', response.data.qibla_direction);
+      } else {
+        console.error('Invalid response format:', response);
+        throw new Error(`Invalid qibla direction response format: ${JSON.stringify(response)}`);
+      }
     } catch (error) {
       console.error('Error fetching qibla direction:', error);
       Alert.alert(
         'Error',
-        'Failed to fetch qibla direction. Please check your internet connection and try again.',
+        `Failed to fetch qibla direction: ${error instanceof Error ? error.message : 'Unknown error'}`,
         [{ text: 'OK' }]
       );
     } finally {
@@ -95,6 +158,14 @@ export default function QiblaScreen() {
   };
 
   const startCompassUpdates = () => {
+    if (compassActive) {
+      console.log('Compass updates already running');
+      return;
+    }
+
+    console.log('Starting compass updates...');
+    setCompassActive(true);
+    
     // Start magnetometer updates for compass functionality
     Magnetometer.setUpdateInterval(100);
     Magnetometer.addListener((data) => {
@@ -105,9 +176,10 @@ export default function QiblaScreen() {
       const normalizedHeading = (heading + 360) % 360;
       setDeviceHeading(normalizedHeading);
       
-      if (qiblaDirection) {
+      const currentQiblaDirection = qiblaDirectionRef.current;
+      if (currentQiblaDirection && currentQiblaDirection.data && typeof currentQiblaDirection.data.qibla_direction === 'number') {
         // Calculate the rotation needed to point to qibla
-        const qiblaRotation = qiblaDirection.data.qibla_direction - normalizedHeading;
+        const qiblaRotation = currentQiblaDirection.data.qibla_direction - normalizedHeading;
         const normalizedRotation = ((qiblaRotation % 360) + 360) % 360;
         
         setCompassRotation(normalizedRotation);
@@ -122,7 +194,20 @@ export default function QiblaScreen() {
     });
   };
 
+  const stopCompassUpdates = () => {
+    if (!compassActive) return;
+    
+    console.log('Stopping compass updates...');
+    Magnetometer.removeAllListeners();
+    setCompassActive(false);
+  };
+
   const handleLocationSelect = (location: any) => {
+    // Stop current compass updates
+    if (compassActive) {
+      stopCompassUpdates();
+    }
+    
     // Convert LocationSelector location to expo-location format
     const expoLocation: ExpoLocation.LocationObject = {
       coords: {
@@ -139,7 +224,9 @@ export default function QiblaScreen() {
     
     setCurrentLocation(expoLocation);
     setQiblaDirection(null);
+    qiblaDirectionRef.current = null;
     setCompassRotation(0);
+    setDeviceHeading(0);
   };
 
   const requestLocationPermission = async () => {
@@ -148,7 +235,7 @@ export default function QiblaScreen() {
       if (status === 'granted') {
         setHasLocationPermission(true);
         
-        // Get current location
+        // Get current location using Expo Location
         const location = await ExpoLocation.getCurrentPositionAsync({
           accuracy: ExpoLocation.Accuracy.High,
         });

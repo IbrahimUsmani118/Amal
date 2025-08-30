@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import { prayerTimeApi } from '../services/prayerTimeApi';
 import { Location } from '../types/common';
 
@@ -58,8 +57,8 @@ export default function LocationSelector({
     // For now, we'll use a default list
     // In a real app, you'd load this from AsyncStorage
     setRecentLocations([
-      { city: 'Istanbul', country: 'Turkey' },
       { city: 'Mecca', country: 'Saudi Arabia' },
+      { city: 'Medina', country: 'Saudi Arabia' },
     ]);
   };
 

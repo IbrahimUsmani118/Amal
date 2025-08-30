@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import quranApiService, { Surah } from '@/services/quranApi';
 import { Ionicons } from '@expo/vector-icons';
+// Voice recognition temporarily disabled for Expo Go compatibility
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -144,6 +145,10 @@ export default function QuranReaderScreen() {
   const { theme } = useTheme();
   const [currentMode, setCurrentMode] = useState('reading');
   const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const [completedWords, setCompletedWords] = useState<Set<number>>(new Set());
+  const [isFollowingVoice, setIsFollowingVoice] = useState(false);
+  const [voiceRecognitionInterval, setVoiceRecognitionInterval] = useState<number | null>(null);
   const [selectedSurah, setSelectedSurah] = useState(1);
   const [currentSurah, setCurrentSurah] = useState<Surah | null>(null);
   const [loading, setLoading] = useState(false);
@@ -155,7 +160,12 @@ export default function QuranReaderScreen() {
     surahName: string;
     ayahText: string;
   } | null>(null);
-
+  const [detectionMode, setDetectionMode] = useState(true); // true for detection, false for tracking
+  const [currentVerse, setCurrentVerse] = useState(1);
+  const [speechRecognition, setSpeechRecognition] = useState<any>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [speechBuffer, setSpeechBuffer] = useState<string[]>([]);
+  const [voiceRecognitionAvailable, setVoiceRecognitionAvailable] = useState(true);
 
 
   // Redirect to login if not authenticated
@@ -224,7 +234,7 @@ export default function QuranReaderScreen() {
     setIsVoiceActive(true);
     setShowListeningModal(true);
     
-    // Simulate detecting recitation after 2 seconds
+    // Simulate detecting recitation after 1 second
     setTimeout(() => {
       setCurrentRecitation({
         surah: 1,
@@ -232,7 +242,7 @@ export default function QuranReaderScreen() {
         surahName: 'Al-Fatiha',
         ayahText: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ'
       });
-    }, 2000);
+    }, 1000);
   };
 
   const stopListening = () => {
@@ -243,15 +253,89 @@ export default function QuranReaderScreen() {
 
   useEffect(() => {
     fetchSurah(1); // Load Al-Fatiha by default
+    initializeVoiceRecognition();
+    
+    // Cleanup function for voice recognition (disabled for now)
+    return () => {
+      console.log('Voice recognition cleanup completed');
+    };
   }, []);
+
+  const initializeVoiceRecognition = () => {
+    // Voice recognition temporarily disabled for Expo Go compatibility
+    console.log('Voice recognition disabled - using fallback mode');
+    setVoiceRecognitionAvailable(false);
+  };
+
+  // Voice recognition functions temporarily disabled for Expo Go compatibility
 
   const toggleMode = (mode: string) => setCurrentMode(mode);
   const toggleVoice = () => {
     if (isVoiceActive) {
-      stopListening();
+      setIsVoiceActive(false);
+      setIsFollowingVoice(false);
+      setDetectionMode(true);
+      setIsListening(false);
+      
+      // Clear highlights
+      setCompletedWords(new Set());
+      setCurrentWordIndex(0);
+      setSpeechBuffer([]);
     } else {
-      startListening();
+      Alert.alert(
+        'Voice Recognition Not Available',
+        'Voice recognition requires a development build. For now, you can use the manual word highlighting feature.',
+        [{ text: 'OK' }]
+      );
     }
+  };
+
+  // Voice recognition now handles word progression automatically
+
+  const getVerseForWordIndex = (wordIndex: number): number | null => {
+    if (!currentSurah || !currentSurah.ayahs) return null;
+    
+    let currentWordCount = 0;
+    for (let i = 0; i < currentSurah.ayahs.length; i++) {
+      const ayah = currentSurah.ayahs[i];
+      const wordsInAyah = ayah.text.split(' ').length || 0;
+      if (wordIndex < currentWordCount + wordsInAyah) {
+        return ayah.number;
+      }
+      currentWordCount += wordsInAyah;
+    }
+    return null;
+  };
+
+  const getGlobalWordIndex = (ayahIndex: number, wordIndex: number) => {
+    if (!currentSurah || !currentSurah.ayahs) return 0;
+    
+    let globalIndex = 0;
+    for (let i = 0; i < ayahIndex; i++) {
+      globalIndex += currentSurah.ayahs[i].text.split(' ').length || 0;
+    }
+    return globalIndex + wordIndex;
+  };
+
+  const getTotalWords = () => {
+    if (!currentSurah || !currentSurah.ayahs) return 0;
+    
+    return currentSurah.ayahs.reduce((acc, ayah) => {
+      return acc + (ayah.text.split(' ').length || 0);
+    }, 0);
+  };
+
+  const getWordHighlightStyle = (wordIndex: number, ayahIndex: number) => {
+    if (!currentSurah || !currentSurah.ayahs) return {};
+    
+    const globalWordIndex = getGlobalWordIndex(ayahIndex, wordIndex);
+    
+    if (globalWordIndex === currentWordIndex && isFollowingVoice) {
+      return { backgroundColor: '#ff4444', color: 'white' }; // Red for current word
+    } else if (completedWords.has(globalWordIndex)) {
+      return { backgroundColor: '#44ff44', color: 'black' }; // Green for completed words
+    }
+    return {}; // Default styling
   };
   const toggleSurahSelector = () => setShowSurahSelector(!showSurahSelector);
 
@@ -366,12 +450,51 @@ export default function QuranReaderScreen() {
             </Text>
           </TouchableOpacity>
           <Text style={[styles.voiceStatus, isVoiceActive && styles.voiceStatusListening]}>
-            {isVoiceActive ? 'Listening...' : 'Tap to activate'}
+            {isVoiceActive 
+              ? (detectionMode ? 'Listening for starting position...' : `Following verse ${currentVerse}`)
+              : 'Tap to activate voice recognition'
+            }
           </Text>
         </View>
+
+        {/* Voice Recognition Status */}
+        {isVoiceActive && (
+          <View style={styles.debugContainer}>
+            <Text style={[styles.debugTitle, styles[`${theme}DebugTitle`]]}>
+              Voice Recognition Status
+            </Text>
+            <Text style={[styles.debugText, styles[`${theme}DebugText`]]}>
+              Status: Voice recognition requires development build
+            </Text>
+            <Text style={[styles.debugText, styles[`${theme}DebugText`]]}>
+              Current Word: {currentWordIndex + 1} / {getTotalWords()}
+            </Text>
+            <Text style={[styles.debugText, styles[`${theme}DebugText`]]}>
+              Current Verse: {currentVerse}
+            </Text>
+          </View>
+        )}
+
+        {/* Progress Indicator */}
+        {isFollowingVoice && currentSurah && (
+          <View style={styles.progressContainer}>
+            <View style={styles.progressBar}>
+              <View 
+                style={[
+                  styles.progressFill, 
+                  { width: `${((currentWordIndex + 1) / getTotalWords()) * 100}%` }
+                ]} 
+              />
+            </View>
+            <Text style={[styles.progressText, styles[`${theme}ProgressText`]]}>
+              {currentWordIndex + 1} / {getTotalWords()} words • Verse {currentVerse}
+            </Text>
+          </View>
+        )}
+
+        {/* Surah Dropdown Modal */}
       </View>
 
-      {/* Surah Dropdown Modal */}
       <Modal
         visible={showSurahSelector}
         transparent={true}
@@ -506,7 +629,7 @@ export default function QuranReaderScreen() {
               </View>
 
               {/* Verses */}
-              {currentSurah.ayahs.map((ayah) => (
+              {currentSurah.ayahs.map((ayah, ayahIndex) => (
                 <View key={ayah.number} style={styles.verseContainer}>
                   <View style={styles.verseHeader}>
                     <View style={[styles.verseNumber, styles[`${theme}VerseNumber`]]}>
@@ -516,7 +639,17 @@ export default function QuranReaderScreen() {
                     </View>
                   </View>
                   <Text style={[styles.verseArabic, styles[`${theme}VerseArabic`]]}>
-                    {ayah.text}
+                    {ayah.text.split(' ').map((word, wordIndex) => (
+                      <Text
+                        key={`${ayah.number}-${wordIndex}`}
+                        style={[
+                          styles.verseArabicWord,
+                          getWordHighlightStyle(wordIndex, ayahIndex)
+                        ]}
+                      >
+                        {word}{' '}
+                      </Text>
+                    ))}
                   </Text>
                   <Text style={[styles.verseTranslation, styles[`${theme}VerseTranslation`]]}>
                     {ayah.translation}
@@ -827,12 +960,14 @@ const styles = StyleSheet.create({
   voiceToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 22,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'transparent',
+    gap: 8,
   },
   voiceToggleActive: {
     backgroundColor: '#27ae60',
@@ -1196,5 +1331,71 @@ const styles = StyleSheet.create({
   },
   lightVerseTranslation: {
     color: '#6a6a6a',
+  },
+  verseArabicWord: {
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Amiri' : 'serif',
+    paddingHorizontal: 2,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginHorizontal: 1,
+  },
+  progressContainer: {
+    width: '90%',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  progressBar: {
+    width: '100%',
+    height: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 4,
+    marginBottom: 10,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#27ae60',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  darkProgressText: {
+    color: '#b0b0b0',
+  },
+  lightProgressText: {
+    color: '#6a6a6a',
+  },
+  debugContainer: {
+    width: '90%',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 10,
+    padding: 15,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffd700',
+    marginBottom: 5,
+  },
+  darkDebugTitle: {
+    color: '#ffd700',
+  },
+  lightDebugTitle: {
+    color: '#3d3d3d',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#e8e8e8',
+    marginBottom: 2,
+  },
+  darkDebugText: {
+    color: '#e8e8e8',
+  },
+  lightDebugText: {
+    color: '#3d3d3d',
   },
 });

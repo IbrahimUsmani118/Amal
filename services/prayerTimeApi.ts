@@ -1,5 +1,5 @@
-// Prayer Time API Service using CollectAPI
-// API Documentation: https://collectapi.com/api/pray/all
+// Prayer Time API Service using Aladhan API (free, no authentication required)
+// API Documentation: https://aladhan.com/prayer-times-api
 
 export interface PrayerTime {
   name: string;
@@ -25,39 +25,22 @@ export interface PrayerTimeError {
 }
 
 class PrayerTimeApiService {
-  private baseUrl = 'https://api.collectapi.com';
-  private apiKey: string;
-
-  constructor(apiKey: string) {
-    this.apiKey = apiKey;
-  }
+  private baseUrl = 'https://api.aladhan.com/v1';
 
   /**
    * Get prayer times for a specific city
    */
   async getPrayerTimes(city: string, country?: string): Promise<PrayerTimesResponse> {
     try {
-      const url = `${this.baseUrl}/pray/all?city=${encodeURIComponent(city)}`;
+      // First, get coordinates for the city
+      const coordinates = await this.getCityCoordinates(city, country);
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `apikey ${this.apiKey}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!coordinates) {
+        throw new Error(`Could not find coordinates for ${city}, ${country || 'Unknown'}`);
       }
 
-      const data = await response.json();
-      
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to fetch prayer times');
-      }
-
-      return data;
+      // Get prayer times using coordinates
+      return await this.getPrayerTimesByCoordinates(coordinates.lat, coordinates.lng);
     } catch (error) {
       console.error('Error fetching prayer times:', error);
       throw {
@@ -68,31 +51,49 @@ class PrayerTimeApiService {
   }
 
   /**
-   * Get prayer times for coordinates (if supported by the API)
+   * Get prayer times for coordinates
    */
   async getPrayerTimesByCoordinates(latitude: number, longitude: number): Promise<PrayerTimesResponse> {
     try {
-      const url = `${this.baseUrl}/pray/all?lat=${latitude}&lng=${longitude}`;
+      const today = new Date();
+      const date = `${today.getDate()}-${today.getMonth() + 1}-${today.getFullYear()}`;
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `apikey ${this.apiKey}`,
-        },
-      });
-
+      const url = `${this.baseUrl}/timings/${date}?latitude=${latitude}&longitude=${longitude}&method=2`;
+      
+      const response = await fetch(url);
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
       
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to fetch prayer times');
+      if (data.status !== 'OK') {
+        throw new Error('Failed to fetch prayer times');
       }
 
-      return data;
+      // Transform Aladhan API response to our format
+      const timings = data.data.timings;
+      const location = data.data.meta.timezone;
+      
+      const prayerTimes: PrayerTime[] = [
+        { name: 'Fajr', time: timings.Fajr, date: today.toISOString().split('T')[0] },
+        { name: 'Sunrise', time: timings.Sunrise, date: today.toISOString().split('T')[0] },
+        { name: 'Dhuhr', time: timings.Dhuhr, date: today.toISOString().split('T')[0] },
+        { name: 'Asr', time: timings.Asr, date: today.toISOString().split('T')[0] },
+        { name: 'Maghrib', time: timings.Maghrib, date: today.toISOString().split('T')[0] },
+        { name: 'Isha', time: timings.Isha, date: today.toISOString().split('T')[0] }
+      ];
+
+      return {
+        success: true,
+        result: {
+          city: this.extractCityFromTimezone(location),
+          country: this.extractCountryFromTimezone(location),
+          date: today.toISOString().split('T')[0],
+          times: prayerTimes
+        }
+      };
     } catch (error) {
       console.error('Error fetching prayer times by coordinates:', error);
       throw {
@@ -107,27 +108,25 @@ class PrayerTimeApiService {
    */
   async searchCities(query: string): Promise<Location[]> {
     try {
-      const url = `${this.baseUrl}/pray/cities?q=${encodeURIComponent(query)}`;
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=10`; // Increased limit for more results
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `apikey ${this.apiKey}`,
-        },
-      });
-
+      const response = await fetch(url);
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
       
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to search cities');
+      if (!data || data.length === 0) {
+        return [];
       }
 
-      return data.result || [];
+      return data.map((item: any) => ({
+        name: item.display_name,
+        latitude: parseFloat(item.lat),
+        longitude: parseFloat(item.lon)
+      }));
     } catch (error) {
       console.error('Error searching cities:', error);
       throw {
@@ -135,6 +134,52 @@ class PrayerTimeApiService {
         code: 'SEARCH_ERROR'
       } as PrayerTimeError;
     }
+  }
+
+  /**
+   * Get city coordinates using OpenStreetMap Nominatim API (free)
+   */
+  private async getCityCoordinates(city: string, country?: string): Promise<{ lat: number; lng: number } | null> {
+    try {
+      const searchQuery = country ? `${city}, ${country}` : city;
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=1`;
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      
+      if (data && data.length > 0) {
+        return {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon)
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error getting city coordinates:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Extract city name from timezone string
+   */
+  private extractCityFromTimezone(timezone: string): string {
+    const parts = timezone.split('/');
+    return parts[parts.length - 1] || 'Unknown';
+  }
+
+  /**
+   * Extract country from timezone string
+   */
+  private extractCountryFromTimezone(timezone: string): string {
+    const parts = timezone.split('/');
+    return parts[0] || 'Unknown';
   }
 
   /**
@@ -236,9 +281,7 @@ class PrayerTimeApiService {
 }
 
 // Create and export a default instance
-// Note: You'll need to set your API key in your environment or config
-const API_KEY = process.env.COLLECT_API_KEY || 'your_api_key_here';
-export const prayerTimeApi = new PrayerTimeApiService(API_KEY);
+export const prayerTimeApi = new PrayerTimeApiService();
 
 // Export the class for custom instances
 export default PrayerTimeApiService;

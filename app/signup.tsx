@@ -240,32 +240,6 @@ export default function SignupScreen() {
                 </Text>
               </TouchableOpacity>
 
-              {/* Firebase Test Button */}
-              <TouchableOpacity 
-                style={[styles.testButton, { borderColor: '#ffd700' }]}
-                onPress={async () => {
-                  console.log('🧪 Testing Firebase connection...');
-                  try {
-                    const { testFirebaseStatus } = await import('../services/firebase');
-                    const result = await testFirebaseStatus();
-                    console.log('🔥 Firebase test result:', result);
-                    
-                    if (result.success) {
-                      Alert.alert('Firebase Test', '✅ Firebase is working! You can now try to signup.');
-                    } else {
-                      Alert.alert('Firebase Test', '❌ Firebase connection failed. Check console for details.');
-                    }
-                  } catch (error) {
-                    console.error('❌ Firebase test failed:', error);
-                    Alert.alert('Firebase Test', '❌ Failed to test Firebase. Check console for details.');
-                  }
-                }}
-              >
-                <Text style={[styles.testButtonText, { color: '#ffd700' }]}>
-                  🧪 Test Firebase
-                </Text>
-              </TouchableOpacity>
-
               <View style={styles.loginContainer}>
                 <Text style={[styles.loginText, styles[`${currentTheme}LoginText`]]}>Already have an account? </Text>
                 <TouchableOpacity onPress={navigateToLogin}>
@@ -416,17 +390,6 @@ const styles = StyleSheet.create({
   },
   loginLink: {
     fontSize: 16,
-    fontWeight: '600',
-  },
-  testButton: {
-    borderRadius: 12,
-    padding: 18,
-    alignItems: 'center',
-    marginBottom: 25,
-    borderWidth: 2,
-  },
-  testButtonText: {
-    fontSize: 18,
     fontWeight: '600',
   },
   passwordStrength: {

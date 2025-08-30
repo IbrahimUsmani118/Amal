@@ -1,14 +1,14 @@
 // Import the functions you need from the SDKs you need
 import { FirebaseApp, getApp, initializeApp } from "firebase/app";
 import {
-  Auth,
-  createUserWithEmailAndPassword,
-  getAuth,
-  onAuthStateChanged,
-  sendEmailVerification,
-  signInWithEmailAndPassword,
-  signOut,
-  User
+    Auth,
+    createUserWithEmailAndPassword,
+    getAuth,
+    onAuthStateChanged,
+    sendEmailVerification,
+    signInWithEmailAndPassword,
+    signOut,
+    User
 } from "firebase/auth";
 import { Functions, getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -390,59 +390,6 @@ export const verifyEmail = async (token: string) => {
   }
 };
 
-// Test Firebase Cloud Function connection
-export const testCloudFunction = async () => {
-  try {
-    console.log('🧪 Testing Firebase Cloud Function...');
-    
-    if (testFirebaseConnection) {
-      const result = await testFirebaseConnection({});
-      console.log('✅ Firebase Cloud Function test successful:', result.data);
-      
-      return {
-        success: true,
-        message: 'Firebase Cloud Function test successful!'
-      };
-    } else {
-      return {
-        success: false,
-        message: 'Firebase Cloud Functions not available'
-      };
-    }
-    
-  } catch (error: any) {
-    console.error('❌ Firebase Cloud Function test failed:', error);
-    throw new Error('Firebase Cloud Function test failed. Please check your configuration.');
-  }
-};
-
 // Export auth instance and functions for use in other parts of the app
 export { auth, functions, onAuthStateChanged, User };
-
-// Simple test function to verify Firebase connectivity
-export const testFirebaseStatus = async () => {
-  try {
-    console.log('🧪 Testing Firebase connection...');
-    
-    if (!auth) {
-      console.log('❌ Auth instance not available');
-      return { success: false, message: 'Auth instance not available' };
-    }
-    
-    if (!functions) {
-      console.log('❌ Functions instance not available');
-      return { success: false, message: 'Functions instance not available' };
-    }
-    
-    console.log('✅ Firebase instances available');
-    console.log('🔧 Auth current user:', auth.currentUser);
-    console.log('🔧 Auth state:', auth);
-    
-    return { success: true, message: 'Firebase connection test successful!' };
-    
-  } catch (error) {
-    console.error('❌ Firebase connection test failed:', error);
-    return { success: false, message: 'Firebase connection test failed' };
-  }
-};
 
