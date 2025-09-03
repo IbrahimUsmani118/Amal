@@ -1,5 +1,5 @@
+import { settingsManager, ThemeSettings } from '@/services/settingsManager';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { settingsManager, ThemeSettings } from '../services/settingsManager';
 
 interface ThemeContextType {
   theme: 'light' | 'dark';

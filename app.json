@@ -16,8 +16,10 @@
         "NSLocationWhenInUseUsageDescription": "This app needs location access to provide accurate prayer times and qibla direction.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs location access to provide accurate prayer times and qibla direction.",
         "NSCameraUsageDescription": "This app may need camera access for future features.",
-        "NSPhotoLibraryUsageDescription": "This app may need photo library access for future features."
-      }
+        "NSPhotoLibraryUsageDescription": "This app may need photo library access for future features.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.ibrahimusmani.Amal"
     },
     "android": {
       "adaptiveIcon": {
@@ -56,15 +58,19 @@
       ],
       "expo-sqlite",
       "expo-secure-store",
-      "expo-localization"
+      "expo-localization",
+      "@react-native-voice/voice",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "eas": {
-        "projectId": "your-project-id"
-      }
-    }
+        "projectId": "e647edaf-7ce2-4ada-9a27-2da0c63eaa7b"
+      },
+      "router": {}
+    },
+    "owner": "ibrahimusmani"
   }
 }

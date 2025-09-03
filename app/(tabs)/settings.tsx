@@ -1,27 +1,26 @@
 import UniversalHeader from '@/components/UniversalHeader';
 import { useAuth } from '@/contexts/AuthContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useTheme } from '@/contexts/ThemeContext';
 import { settingsManager, UserPreferences } from '@/services/settingsManager';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 export default function SettingsScreen() {
-  const colorScheme = useColorScheme();
+  const { theme, setTheme } = useTheme();
   const { user } = useAuth();
   const [settings, setSettings] = useState<UserPreferences | null>(null);
   const [loading, setLoading] = useState(true);
-  const theme = settings?.theme.mode === 'light' ? 'light' : 'dark';
 
   // Load settings on component mount
   useEffect(() => {
@@ -95,9 +94,9 @@ export default function SettingsScreen() {
 
   if (loading || !settings) {
     return (
-      <View style={[styles.container, { backgroundColor: '#0a0a0a' }]}>
+      <View style={[styles.container, { backgroundColor: theme === 'light' ? '#f8f6f0' : '#0a0a0a' }]}>
         <View style={styles.loadingContainer}>
-          <Text style={{ color: '#ffffff', fontSize: 18 }}>Loading settings...</Text>
+          <Text style={{ color: theme === 'light' ? '#3d3d3d' : '#ffffff', fontSize: 18 }}>Loading settings...</Text>
         </View>
       </View>
     );
@@ -111,9 +110,13 @@ export default function SettingsScreen() {
           icon: 'moon-outline',
           label: 'Dark Mode',
           type: 'toggle',
-          value: settings.theme.mode === 'light',
-          onValueChange: (value: boolean) => 
-            updateSetting('theme', 'mode', value ? 'light' : 'dark'),
+          value: theme === 'light',
+          onValueChange: (value: boolean) => {
+            const newTheme = value ? 'light' : 'dark';
+            setTheme(newTheme);
+            // Also update the local settings for persistence
+            updateSetting('theme', 'mode', newTheme);
+          },
         },
         {
           icon: 'text-outline',

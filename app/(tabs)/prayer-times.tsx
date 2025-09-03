@@ -1,6 +1,6 @@
 import LocationSelector from '@/components/LocationSelector';
 import UniversalHeader from '@/components/UniversalHeader';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useTheme } from '@/contexts/ThemeContext';
 import { PrayerTime, prayerTimeApi } from '@/services/prayerTimeApi';
 import { Location } from '@/types/common';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,13 +17,16 @@ import {
 } from 'react-native';
 
 export default function PrayerTimesScreen() {
-  const colorScheme = useColorScheme();
-  const theme = colorScheme || 'dark';
+  const { theme } = useTheme();
   const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
   const [prayerTimes, setPrayerTimes] = useState<PrayerTime[]>([]);
   const [loading, setLoading] = useState(false);
   const [nextPrayer, setNextPrayer] = useState<PrayerTime | null>(null);
   const [timeUntilNext, setTimeUntilNext] = useState<{ hours: number; minutes: number } | null>(null);
+  const [userTimezone, setUserTimezone] = useState<string>('');
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(0);
+  const [isCountdownActive, setIsCountdownActive] = useState<boolean>(false);
+  const [pulseScale, setPulseScale] = useState<number>(1);
 
   // Set default location on component mount
   useEffect(() => {
@@ -34,6 +37,10 @@ export default function PrayerTimesScreen() {
 
   const getUserLocation = async () => {
     try {
+      // Get user's timezone first
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      setUserTimezone(timezone);
+      
       // Try to get user's current location
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -57,18 +64,20 @@ export default function PrayerTimesScreen() {
           return;
         }
       } catch (error) {
-        console.log('Could not get location by coordinates, falling back to default');
+        console.log('Could not get location by coordinates, falling back to timezone-based location');
       }
 
       // Fallback to a reasonable default based on user's timezone
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const defaultLocation = getDefaultLocationByTimezone(timezone);
       setCurrentLocation(defaultLocation);
       
     } catch (error) {
-      console.log('Could not get user location, using fallback');
-      // Fallback to a reasonable default
-      setCurrentLocation({ city: 'Mecca', country: 'Saudi Arabia' });
+      console.log('Could not get user location, using timezone-based fallback');
+      // Fallback to timezone-based location
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      setUserTimezone(timezone);
+      const defaultLocation = getDefaultLocationByTimezone(timezone);
+      setCurrentLocation(defaultLocation);
     }
   };
 
@@ -79,20 +88,53 @@ export default function PrayerTimesScreen() {
       'America/Chicago': { city: 'Chicago', country: 'USA' },
       'America/Denver': { city: 'Denver', country: 'USA' },
       'America/Los_Angeles': { city: 'Los Angeles', country: 'USA' },
+      'America/Toronto': { city: 'Toronto', country: 'Canada' },
+      'America/Vancouver': { city: 'Vancouver', country: 'Canada' },
       'Europe/London': { city: 'London', country: 'UK' },
       'Europe/Paris': { city: 'Paris', country: 'France' },
       'Europe/Berlin': { city: 'Berlin', country: 'Germany' },
+      'Europe/Moscow': { city: 'Moscow', country: 'Russia' },
       'Asia/Dubai': { city: 'Dubai', country: 'UAE' },
       'Asia/Karachi': { city: 'Karachi', country: 'Pakistan' },
       'Asia/Dhaka': { city: 'Dhaka', country: 'Bangladesh' },
       'Asia/Kolkata': { city: 'Mumbai', country: 'India' },
       'Asia/Shanghai': { city: 'Shanghai', country: 'China' },
       'Asia/Tokyo': { city: 'Tokyo', country: 'Japan' },
+      'Asia/Seoul': { city: 'Seoul', country: 'South Korea' },
       'Australia/Sydney': { city: 'Sydney', country: 'Australia' },
+      'Australia/Melbourne': { city: 'Melbourne', country: 'Australia' },
       'Pacific/Auckland': { city: 'Auckland', country: 'New Zealand' },
+      'Africa/Cairo': { city: 'Cairo', country: 'Egypt' },
+      'Africa/Lagos': { city: 'Lagos', country: 'Nigeria' },
+      'Africa/Johannesburg': { city: 'Johannesburg', country: 'South Africa' },
     };
 
-    return timezoneMap[timezone] || { city: 'Mecca', country: 'Saudi Arabia' };
+    return timezoneMap[timezone] || { city: 'London', country: 'UK' };
+  };
+
+  const getCurrentLocationTime = (timezone: string) => {
+    try {
+      // Try to get a simple timezone offset if possible
+      const now = new Date();
+      
+      // For now, just show the timezone name in a readable format
+      const cleanTimezone = timezone.replace(/_/g, ' ').replace(/\//g, ' / ');
+      return cleanTimezone;
+    } catch (error) {
+      console.error('Error getting location time:', error);
+      return 'Unknown';
+    }
+  };
+
+  const getTimeDifference = (locationTimezone: string) => {
+    try {
+      // For now, just show a simple indicator
+      // This avoids complex timezone conversion errors
+      return 'Local time';
+    } catch (error) {
+      console.error('Error calculating time difference:', error);
+      return 'Unknown';
+    }
   };
 
   // Fetch prayer times when location changes
@@ -110,6 +152,43 @@ export default function PrayerTimesScreen() {
       return () => clearInterval(interval);
     }
   }, [prayerTimes]);
+
+  // Real-time countdown timer
+  useEffect(() => {
+    if (timeUntilNext && prayerTimes.length > 0) {
+      // Calculate total seconds
+      const totalSeconds = timeUntilNext.hours * 3600 + timeUntilNext.minutes * 60;
+      setCountdownSeconds(totalSeconds);
+      setIsCountdownActive(true);
+      
+      // Update countdown every second
+      const countdownInterval = setInterval(() => {
+        setCountdownSeconds(prev => {
+          if (prev <= 1) {
+            // Countdown finished, refresh prayer times
+            setIsCountdownActive(false);
+            updateNextPrayer();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      // Add subtle pulse effect every second
+      const pulseInterval = setInterval(() => {
+        setPulseScale(1.02);
+        setTimeout(() => setPulseScale(1), 200);
+      }, 1000);
+      
+      return () => {
+        clearInterval(countdownInterval);
+        clearInterval(pulseInterval);
+      };
+    } else {
+      setIsCountdownActive(false);
+      setCountdownSeconds(0);
+    }
+  }, [timeUntilNext, prayerTimes.length]);
 
   const fetchPrayerTimes = async () => {
     if (!currentLocation) return;
@@ -173,6 +252,14 @@ export default function PrayerTimesScreen() {
 
   const colors = getThemeColors();
 
+  const formatCountdown = (totalSeconds: number): string => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Universal Header */}
@@ -187,6 +274,11 @@ export default function PrayerTimesScreen() {
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {currentLocation ? `${currentLocation.city}, ${currentLocation.country}` : 'Select your location'}
           </Text>
+          {userTimezone && (
+            <Text style={[styles.timezoneInfo, { color: colors.textSecondary }]}>
+              Your timezone: {userTimezone}
+            </Text>
+          )}
         </View>
 
         {/* Location Selector */}
@@ -211,15 +303,29 @@ export default function PrayerTimesScreen() {
                   {nextPrayer.name}
                 </Text>
                 <Text style={[styles.nextPrayerTime, { color: colors.text }]}>
-                  {prayerTimeApi.formatPrayerTime(nextPrayer.time)}
+                  {prayerTimeApi.formatPrayerTime(nextPrayer.time, nextPrayer.timezone)}
                 </Text>
+                {nextPrayer.timezone && (
+                  <Text style={[styles.locationTimeInfo, { color: colors.textSecondary }]}>
+                    Location timezone: {getCurrentLocationTime(nextPrayer.timezone)}
+                  </Text>
+                )}
               </View>
               <View style={styles.countdownContainer}>
                 <Text style={[styles.countdownLabel, { color: colors.textSecondary }]}>
-                  Time Remaining
+                  Time Until {nextPrayer?.name}
                 </Text>
-                <Text style={[styles.countdownTime, { color: colors.accent }]}>
-                  {timeUntilNext.hours}h {timeUntilNext.minutes}m
+                <Text style={[
+                  styles.countdownTime, 
+                  { 
+                    color: countdownSeconds <= 600 ? '#ff6b6b' : colors.accent, // Red when less than 10 minutes
+                    transform: [{ scale: pulseScale }]
+                  }
+                ]}>
+                  {formatCountdown(countdownSeconds)}
+                </Text>
+                <Text style={[styles.countdownSubtext, { color: colors.textSecondary }]}>
+                  Updates every second
                 </Text>
               </View>
             </View>
@@ -238,6 +344,9 @@ export default function PrayerTimesScreen() {
           <View style={styles.prayerTimesContainer}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Today's Prayer Times
+            </Text>
+            <Text style={[styles.timezoneNote, { color: colors.textSecondary }]}>
+              Times shown are in {currentLocation?.city}'s local timezone
             </Text>
             {prayerTimes.map((prayer, index) => (
               <View
@@ -261,14 +370,16 @@ export default function PrayerTimesScreen() {
                   </Text>
                 </View>
                 <View style={styles.prayerTimeRight}>
-                  <Text style={[styles.prayerTime, { color: colors.primary }]}>
-                    {prayerTimeApi.formatPrayerTime(prayer.time)}
-                  </Text>
-                  {nextPrayer?.name === prayer.name && (
-                    <View style={[styles.nextIndicator, { backgroundColor: colors.accent }]}>
-                      <Text style={styles.nextIndicatorText}>Next</Text>
-                    </View>
-                  )}
+                  <View style={styles.timeAndNextContainer}>
+                    {nextPrayer?.name === prayer.name && (
+                      <View style={[styles.nextIndicator, { backgroundColor: colors.accent }]}>
+                        <Text style={[styles.nextIndicatorText, { color: colors.surface }]}>Next</Text>
+                      </View>
+                    )}
+                    <Text style={[styles.prayerTime, { color: colors.primary }]}>
+                      {prayerTimeApi.formatPrayerTime(prayer.time, prayer.timezone)}
+                    </Text>
+                  </View>
                 </View>
               </View>
             ))}
@@ -325,16 +436,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '300',
   },
+  timezoneInfo: {
+    fontSize: 14,
+    fontWeight: '300',
+    marginTop: 8,
+    opacity: 0.8,
+  },
   nextPrayerCard: {
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
     borderWidth: 1,
   },
   nextPrayerTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 15,
+    marginBottom: 8,
   },
   nextPrayerContent: {
     flexDirection: 'row',
@@ -345,28 +462,39 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   nextPrayerName: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   nextPrayerNameEnglish: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '400',
   },
   nextPrayerTime: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '700',
+    marginTop: 2,
   },
   countdownContainer: {
     alignItems: 'center',
+    minWidth: 100,
   },
   countdownLabel: {
-    fontSize: 14,
-    marginBottom: 5,
+    fontSize: 11,
+    marginBottom: 3,
+    textAlign: 'center',
   },
   countdownTime: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 1,
+  },
+  countdownSubtext: {
+    fontSize: 9,
+    marginTop: 3,
+    opacity: 0.7,
+    textAlign: 'center',
   },
   prayerTimesContainer: {
     paddingHorizontal: 20,
@@ -407,15 +535,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   nextIndicator: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    marginRight: 8,
   },
   nextIndicatorText: {
-    color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -448,5 +573,31 @@ const styles = StyleSheet.create({
   retryButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  timeAndNextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  timeDifference: {
+    fontSize: 12,
+    fontWeight: '400',
+    marginTop: 2,
+    opacity: 0.7,
+  },
+  locationTimeInfo: {
+    fontSize: 11,
+    marginTop: 4,
+    opacity: 0.8,
+  },
+  timezoneNote: {
+    fontSize: 14,
+    marginTop: 10,
+    marginBottom: 15,
+    textAlign: 'center',
   },
 });

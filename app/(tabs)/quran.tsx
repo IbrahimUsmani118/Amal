@@ -2,8 +2,8 @@ import UniversalHeader from '@/components/UniversalHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import quranApiService, { Surah } from '@/services/quranApi';
+import { QuranMatch, useVoiceRecognition } from '@/services/voiceRecognition';
 import { Ionicons } from '@expo/vector-icons';
-// Voice recognition temporarily disabled for Expo Go compatibility
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -162,10 +162,22 @@ export default function QuranReaderScreen() {
   } | null>(null);
   const [detectionMode, setDetectionMode] = useState(true); // true for detection, false for tracking
   const [currentVerse, setCurrentVerse] = useState(1);
-  const [speechRecognition, setSpeechRecognition] = useState<any>(null);
   const [isListening, setIsListening] = useState(false);
   const [speechBuffer, setSpeechBuffer] = useState<string[]>([]);
   const [voiceRecognitionAvailable, setVoiceRecognitionAvailable] = useState(true);
+  const [currentTranscript, setCurrentTranscript] = useState<string>('');
+  const [voiceMatch, setVoiceMatch] = useState<QuranMatch | null>(null);
+
+  // Voice recognition hook
+  const {
+    isListening: voiceIsListening,
+    startListening: voiceStartListening,
+    stopListening: voiceStopListening,
+    requestPermissions: voiceRequestPermissions,
+    speakText: voiceSpeakText,
+    stopSpeaking: voiceStopSpeaking,
+    getEnvironmentStatus: voiceGetEnvironmentStatus
+  } = useVoiceRecognition();
 
 
   // Redirect to login if not authenticated
@@ -229,64 +241,166 @@ export default function QuranReaderScreen() {
     }
   };
 
-  // Simulate recitation detection (replace with actual voice recognition)
-  const startListening = () => {
-    setIsVoiceActive(true);
-    setShowListeningModal(true);
-    
-    // Simulate detecting recitation after 1 second
-    setTimeout(() => {
-      setCurrentRecitation({
-        surah: 1,
-        ayah: 1,
-        surahName: 'Al-Fatiha',
-        ayahText: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ'
-      });
-    }, 1000);
+  // Real voice recognition functions
+  const startListening = async () => {
+    try {
+      const hasPermission = await voiceRequestPermissions();
+      if (!hasPermission) {
+        Alert.alert('Permission Required', 'Microphone access is required for voice recognition.');
+        return;
+      }
+      
+      setIsVoiceActive(true);
+      setShowListeningModal(true);
+      
+      const success = await voiceStartListening(
+        (result) => {
+          console.log('🎤 Voice recognition result:', result);
+          setCurrentTranscript(result.transcript);
+          
+          if (result.isFinal) {
+            console.log('🎤 Final transcript:', result.transcript);
+            // Process the recognized text
+          }
+        },
+        (error) => {
+          console.error('🎤 Voice recognition error:', error);
+          Alert.alert('Voice Recognition Error', error);
+          setIsVoiceActive(false);
+          setShowListeningModal(false);
+        }
+      );
+      
+      if (!success) {
+        throw new Error('Failed to start voice recognition');
+      }
+    } catch (error) {
+      console.error('Failed to start listening:', error);
+      Alert.alert('Error', 'Failed to start voice recognition.');
+      setIsVoiceActive(false);
+      setShowListeningModal(false);
+    }
   };
 
-  const stopListening = () => {
-    setIsVoiceActive(false);
-    setShowListeningModal(false);
-    setCurrentRecitation(null);
+  const stopListening = async () => {
+    try {
+      await voiceStopListening();
+      setIsVoiceActive(false);
+      setShowListeningModal(false);
+      setCurrentRecitation(null);
+    } catch (error) {
+      console.error('Failed to stop listening:', error);
+      Alert.alert('Error', 'Failed to stop voice recognition.');
+    }
   };
 
   useEffect(() => {
     fetchSurah(1); // Load Al-Fatiha by default
-    initializeVoiceRecognition();
-    
-    // Cleanup function for voice recognition (disabled for now)
-    return () => {
-      console.log('Voice recognition cleanup completed');
-    };
+    console.log('✅ Quran component initialized');
   }, []);
 
-  const initializeVoiceRecognition = () => {
-    // Voice recognition temporarily disabled for Expo Go compatibility
-    console.log('Voice recognition disabled - using fallback mode');
-    setVoiceRecognitionAvailable(false);
+
+
+  // Get real environment status from voice recognition service
+  const getSafeEnvironmentStatus = () => {
+    return voiceGetEnvironmentStatus();
   };
 
-  // Voice recognition functions temporarily disabled for Expo Go compatibility
+  // Voice recognition now uses real native service for full performance
 
-  const toggleMode = (mode: string) => setCurrentMode(mode);
-  const toggleVoice = () => {
+  const toggleMode = (mode: string) => {
+    console.log('🔄 Switching to mode:', mode);
+    setCurrentMode(mode);
+    
+    // If switching to reading mode, stop voice recognition
+    if (mode === 'reading' && isVoiceActive) {
+      toggleVoice();
+    }
+  };
+  const toggleVoice = async () => {
+    console.log('🎤 toggleVoice called, current state:', { isVoiceActive, isListening, isFollowingVoice });
+    
     if (isVoiceActive) {
-      setIsVoiceActive(false);
-      setIsFollowingVoice(false);
-      setDetectionMode(true);
-      setIsListening(false);
-      
-      // Clear highlights
-      setCompletedWords(new Set());
-      setCurrentWordIndex(0);
-      setSpeechBuffer([]);
+      // Stop voice recognition
+      console.log('🛑 Stopping voice recognition...');
+      try {
+        await voiceStopListening();
+        setIsVoiceActive(false);
+        setIsFollowingVoice(false);
+        setDetectionMode(true);
+        setIsListening(false);
+        
+        // Clear highlights and state
+        setCompletedWords(new Set());
+        setCurrentWordIndex(0);
+        setSpeechBuffer([]);
+        setCurrentTranscript('');
+        setVoiceMatch(null);
+        setShowListeningModal(false);
+        console.log('✅ Voice recognition stopped successfully');
+      } catch (error) {
+        console.error('Failed to stop voice recognition:', error);
+        Alert.alert('Error', 'Failed to stop voice recognition.');
+      }
     } else {
-      Alert.alert(
-        'Voice Recognition Not Available',
-        'Voice recognition requires a development build. For now, you can use the manual word highlighting feature.',
-        [{ text: 'OK' }]
-      );
+      // Start voice recognition
+      try {
+        console.log('🎤 Starting voice recognition...');
+        
+        // Ensure we have a surah loaded
+        if (!currentSurah) {
+          console.log('📖 No surah loaded, loading Al-Fatiha first...');
+          await fetchSurah(1);
+        }
+        
+        // Request permissions first
+        const hasPermission = await voiceRequestPermissions();
+        if (!hasPermission) {
+          Alert.alert('Permission Required', 'Microphone access is required for voice recognition.');
+          return;
+        }
+        
+        // Show listening modal immediately
+        setShowListeningModal(true);
+        setIsVoiceActive(true);
+        setIsListening(true);
+        setIsFollowingVoice(true);
+        
+        // Start real voice recognition
+        const success = await voiceStartListening(
+          (result) => {
+            console.log('🎤 Voice recognition result:', result);
+            setCurrentTranscript(result.transcript);
+            
+            // Handle the recognized text
+            if (result.isFinal) {
+              // Process final result
+              console.log('🎤 Final transcript:', result.transcript);
+              // You can add logic here to match with Quran text
+            }
+          },
+          (error) => {
+            console.error('🎤 Voice recognition error:', error);
+            Alert.alert('Voice Recognition Error', error);
+            setIsVoiceActive(false);
+            setIsListening(false);
+            setIsFollowingVoice(false);
+          }
+        );
+        
+        if (success) {
+          console.log('✅ Voice recognition started successfully');
+        } else {
+          throw new Error('Failed to start voice recognition');
+        }
+        
+      } catch (error) {
+        console.error('Failed to start voice recognition:', error);
+        Alert.alert('Error', 'Failed to start voice recognition. Please try again.');
+        setIsVoiceActive(false);
+        setIsListening(false);
+        setIsFollowingVoice(false);
+      }
     }
   };
 
@@ -325,15 +439,49 @@ export default function QuranReaderScreen() {
     }, 0);
   };
 
+  const getWordIndexForVerse = (verseNumber: number): number | null => {
+    if (!currentSurah || !currentSurah.ayahs) return null;
+    
+    let wordCount = 0;
+    for (let i = 0; i < currentSurah.ayahs.length; i++) {
+      const ayah = currentSurah.ayahs[i];
+      if (ayah.number === verseNumber) {
+        return wordCount;
+      }
+      wordCount += ayah.text.split(' ').length || 0;
+    }
+    return null;
+  };
+
   const getWordHighlightStyle = (wordIndex: number, ayahIndex: number) => {
     if (!currentSurah || !currentSurah.ayahs) return {};
     
     const globalWordIndex = getGlobalWordIndex(ayahIndex, wordIndex);
     
     if (globalWordIndex === currentWordIndex && isFollowingVoice) {
-      return { backgroundColor: '#ff4444', color: 'white' }; // Red for current word
+      return { 
+        backgroundColor: '#ff4444', 
+        color: 'white',
+        fontWeight: '700' as const,
+        borderRadius: 4,
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 3,
+        transform: [{ scale: 1.05 }]
+      }; // Red for current word with scale effect
     } else if (completedWords.has(globalWordIndex)) {
-      return { backgroundColor: '#44ff44', color: 'black' }; // Green for completed words
+      return { 
+        backgroundColor: '#44ff44', 
+        color: 'black',
+        borderRadius: 4,
+        paddingHorizontal: 2,
+        paddingVertical: 1,
+        opacity: 0.8
+      }; // Green for completed words
     }
     return {}; // Default styling
   };
@@ -356,6 +504,7 @@ export default function QuranReaderScreen() {
     return null; // Will redirect to login
   }
 
+  // Only show loading screen if we have no surah and are actually loading
   if (loading && !currentSurah) {
     return (
       <View style={[styles.container, styles[theme], styles.loadingContainer]}>
@@ -401,7 +550,7 @@ export default function QuranReaderScreen() {
           >
             <Text style={[
               styles.modeBtnText,
-              currentMode === 'reading' && styles[`${theme}ModeBtnTextActive`]
+              currentMode === 'listening' && styles[`${theme}ModeBtnTextActive`]
             ]}>
               Listening
             </Text>
@@ -426,71 +575,46 @@ export default function QuranReaderScreen() {
               color={getIconColor()} 
             />
           </TouchableOpacity>
+          
+
         </View>
 
-        {/* Voice Controls */}
-        <View style={[styles.voiceControls, styles[`${theme}VoiceControls`]]}>
-          <TouchableOpacity
-            style={[
-              styles.voiceToggle,
-              isVoiceActive && styles.voiceToggleActive
-            ]}
-            onPress={toggleVoice}
-          >
-            <Ionicons 
-              name={isVoiceActive ? 'mic' : 'mic-outline'} 
-              size={18} 
-              color={isVoiceActive ? 'white' : getIconColor()} 
-            />
-            <Text style={[
-              styles.voiceToggleText,
-              isVoiceActive && styles.voiceToggleTextActive
-            ]}>
-              {isVoiceActive ? 'Listening' : 'Voice'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={[styles.voiceStatus, isVoiceActive && styles.voiceStatusListening]}>
-            {isVoiceActive 
-              ? (detectionMode ? 'Listening for starting position...' : `Following verse ${currentVerse}`)
-              : 'Tap to activate voice recognition'
-            }
-          </Text>
-        </View>
-
-        {/* Voice Recognition Status */}
-        {isVoiceActive && (
-          <View style={styles.debugContainer}>
-            <Text style={[styles.debugTitle, styles[`${theme}DebugTitle`]]}>
-              Voice Recognition Status
-            </Text>
-            <Text style={[styles.debugText, styles[`${theme}DebugText`]]}>
-              Status: Voice recognition requires development build
-            </Text>
-            <Text style={[styles.debugText, styles[`${theme}DebugText`]]}>
-              Current Word: {currentWordIndex + 1} / {getTotalWords()}
-            </Text>
-            <Text style={[styles.debugText, styles[`${theme}DebugText`]]}>
-              Current Verse: {currentVerse}
-            </Text>
-          </View>
-        )}
-
-        {/* Progress Indicator */}
-        {isFollowingVoice && currentSurah && (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { width: `${((currentWordIndex + 1) / getTotalWords()) * 100}%` }
-                ]} 
+        {/* Voice Controls - Only show in listening mode */}
+        {currentMode === 'listening' && (
+          <View style={[styles.voiceControls, styles[`${theme}VoiceControls`]]}>
+            <TouchableOpacity
+              style={[
+                styles.voiceToggle,
+                isVoiceActive && styles.voiceToggleActive
+              ]}
+              onPress={toggleVoice}
+            >
+              <Ionicons 
+                name={isVoiceActive ? 'mic' : 'mic-outline'} 
+                size={18} 
+                color={isVoiceActive ? 'white' : getIconColor()} 
               />
+              <Text style={[
+                styles.voiceToggleText,
+                isVoiceActive && styles.voiceToggleTextActive
+              ]}>
+                {isVoiceActive ? 'Listening' : 'Voice'}
+              </Text>
+            </TouchableOpacity>
+            
+            <View style={styles.voiceStatusContainer}>
+              <Text style={[styles.voiceStatus, isVoiceActive && styles.voiceStatusListening]}>
+                {isVoiceActive ? 'Voice Recognition Active' : 'Tap to start voice recognition'}
+              </Text>
+              
+
             </View>
-            <Text style={[styles.progressText, styles[`${theme}ProgressText`]]}>
-              {currentWordIndex + 1} / {getTotalWords()} words • Verse {currentVerse}
-            </Text>
           </View>
         )}
+
+
+
+
 
         {/* Surah Dropdown Modal */}
       </View>
@@ -538,63 +662,60 @@ export default function QuranReaderScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Listening Mode Modal */}
-      <Modal
-        visible={showListeningModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={stopListening}
-      >
-        <View style={[styles.listeningModal, styles[`${theme}ListeningModal`]]}>
-          <View style={styles.listeningHeader}>
-            <Text style={[styles.listeningTitle, styles[`${theme}ListeningTitle`]]}>
-              🎧 Listening Mode
-            </Text>
-            <TouchableOpacity onPress={stopListening} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={getIconColor()} />
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.listeningContent}>
-            {currentRecitation ? (
-              <View style={styles.recitationInfo}>
-                <Text style={[styles.recitationLabel, styles[`${theme}RecitationLabel`]]}>
-                  Currently Reciting:
-                </Text>
-                <Text style={[styles.recitationSurah, styles[`${theme}RecitationSurah`]]}>
-                  Surah {currentRecitation.surahName} ({currentRecitation.surah})
-                </Text>
-                <Text style={[styles.recitationAyah, styles[`${theme}RecitationAyah`]]}>
-                  Ayah {currentRecitation.ayah}
-                </Text>
-                <Text style={[styles.recitationText, styles[`${theme}RecitationText`]]}>
-                  {currentRecitation.ayahText}
-                </Text>
-                
-                <TouchableOpacity 
-                  style={[styles.followButton, styles[`${theme}FollowButton`]]}
-                  onPress={() => {
-                    fetchSurah(currentRecitation.surah);
-                    setShowListeningModal(false);
-                  }}
-                >
-                  <Text style={styles.followButtonText}>Follow Along</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.listeningWaiting}>
-                <ActivityIndicator size="large" color={theme === 'light' ? '#5a5a5a' : '#ffd700'} />
-                <Text style={[styles.listeningWaitingText, styles[`${theme}ListeningWaitingText`]]}>
-                  Listening for recitation...
-                </Text>
-                <Text style={[styles.listeningHint, styles[`${theme}ListeningHint`]]}>
-                  Speak clearly or play Quran audio nearby
-                </Text>
-              </View>
-            )}
+            {/* Listening Mode Overlay - Not a Modal, so it doesn't block scrolling */}
+      {showListeningModal && (
+        <View style={styles.listeningModalOverlay}>
+          <View style={[styles.listeningModal, styles[`${theme}ListeningModal`]]}>
+            <View style={styles.listeningHeader}>
+              <Text style={[styles.listeningTitle, styles[`${theme}ListeningTitle`]]}>
+                🎤 Voice Recognition
+              </Text>
+              <TouchableOpacity onPress={stopListening} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color={getIconColor()} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.listeningContent}>
+              {currentRecitation ? (
+                <View style={styles.recitationInfo}>
+                  <Text style={[styles.recitationLabel, styles[`${theme}RecitationLabel`]]}>
+                    Detected Recitation:
+                  </Text>
+                  <Text style={[styles.recitationSurah, styles[`${theme}RecitationSurah`]]}>
+                    Surah {currentRecitation.surahName} ({currentRecitation.surah})
+                  </Text>
+                  <Text style={[styles.recitationAyah, styles[`${theme}RecitationAyah`]]}>
+                    Ayah {currentRecitation.ayah}
+                  </Text>
+                  <Text style={[styles.recitationText, styles[`${theme}RecitationText`]]}>
+                    {currentRecitation.ayahText}
+                  </Text>
+                  
+                  <TouchableOpacity 
+                    style={[styles.followButton, styles[`${theme}FollowButton`]]}
+                    onPress={() => {
+                      fetchSurah(currentRecitation.surah);
+                      setShowListeningModal(false);
+                    }}
+                  >
+                    <Text style={styles.followButtonText}>Follow Along</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.listeningWaiting}>
+                  <ActivityIndicator size="small" color={theme === 'light' ? '#5a5a5a' : '#ffd700'} />
+                  <Text style={[styles.listeningWaitingText, styles[`${theme}ListeningWaitingText`]]}>
+                    Listening for Quran recitation...
+                  </Text>
+                  <Text style={[styles.listeningHint, styles[`${theme}ListeningHint`]]}>
+                    Recite Quran clearly into your microphone
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
-      </Modal>
+      )}
 
       {/* Book Container */}
       <ScrollView 
@@ -602,8 +723,20 @@ export default function QuranReaderScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.pageContent}
       >
-        <View style={[styles.book, styles[`${theme}Book`]]}>
-          {currentSurah && (
+
+        
+        {/* Loading indicator for new surahs */}
+        {loading && (
+          <View style={styles.loadingIndicator}>
+            <ActivityIndicator size="small" color={theme === 'light' ? '#5a5a5a' : '#ffd700'} />
+            <Text style={[styles.loadingIndicatorText, styles[`${theme}LoadingIndicatorText`]]}>
+              Loading new surah...
+            </Text>
+          </View>
+        )}
+        
+                <View style={[styles.book, styles[`${theme}Book`]]}>
+          {currentSurah ? (
             <>
               {/* Surah Header */}
               <View style={[styles.surahHeader, styles[`${theme}SurahHeader`]]}>
@@ -657,6 +790,20 @@ export default function QuranReaderScreen() {
                 </View>
               ))}
             </>
+          ) : (
+            <View style={styles.noSurahContainer}>
+              <Text style={[styles.noSurahText, styles[`${theme}NoSurahText`]]}>
+                {loading ? 'Loading Quran...' : 'No Surah loaded. Please select a Surah.'}
+              </Text>
+              {!loading && (
+                <TouchableOpacity 
+                  style={[styles.loadSurahButton, styles[`${theme}LoadSurahButton`]]}
+                  onPress={() => fetchSurah(1)}
+                >
+                  <Text style={styles.loadSurahButtonText}>Load Al-Fatiha</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </View>
 
@@ -780,15 +927,19 @@ const styles = StyleSheet.create({
   },
   modeToggle: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderRadius: 30,
     padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   darkModeToggle: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   lightModeToggle: {
-    backgroundColor: 'rgba(60, 60, 60, 0.1)',
+    backgroundColor: 'rgba(60, 60, 60, 0.25)',
+    borderColor: 'rgba(60, 60, 60, 0.4)',
   },
   modeBtn: {
     paddingVertical: 10,
@@ -797,32 +948,32 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   modeBtnActive: {
-    backgroundColor: '#d4af37',
+    backgroundColor: '#ffd700',
   },
   darkModeBtnActive: {
-    backgroundColor: '#d4af37',
+    backgroundColor: '#ffd700',
   },
   lightModeBtnActive: {
     backgroundColor: '#5a5a5a',
   },
   modeBtnText: {
-    fontWeight: '500',
+    fontWeight: '700',
     fontSize: 14,
   },
   darkModeBtnText: {
-    color: '#e8e8e8',
+    color: '#ffffff',
   },
   lightModeBtnText: {
     color: '#3d3d3d',
   },
   modeBtnTextActive: {
-    color: '#1a1a2e',
+    color: '#000000',
   },
   darkModeBtnTextActive: {
-    color: '#1a1a2e',
+    color: '#000000',
   },
   lightModeBtnTextActive: {
-    color: '#f8f6f0',
+    color: '#ffffff',
   },
   surahSelector: {
     flexDirection: 'row',
@@ -834,10 +985,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   darkSurahLabel: {
-    color: '#ffd700',
+    color: '#ffffff',
   },
   lightSurahLabel: {
-    color: '#5a5a5a',
+    color: '#3d3d3d',
   },
   selectWrapper: {
     flexDirection: 'row',
@@ -850,19 +1001,20 @@ const styles = StyleSheet.create({
     minWidth: 180,
   },
   darkSelectWrapper: {
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   lightSelectWrapper: {
-    borderColor: 'rgba(60, 60, 60, 0.2)',
-    backgroundColor: 'rgba(248, 246, 240, 0.9)',
+    borderColor: 'rgba(60, 60, 60, 0.3)',
+    backgroundColor: 'rgba(248, 246, 240, 0.95)',
   },
   selectText: {
     fontSize: 14,
     flex: 1,
+    fontWeight: '500',
   },
   darkSelectText: {
-    color: '#e8e8e8',
+    color: '#ffffff',
   },
   lightSelectText: {
     color: '#3d3d3d',
@@ -944,30 +1096,37 @@ const styles = StyleSheet.create({
     color: '#6a6a6a',
   },
   voiceControls: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 30,
-    padding: 8,
+    gap: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    width: '90%',
+    maxWidth: 400,
   },
   darkVoiceControls: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   lightVoiceControls: {
-    backgroundColor: 'rgba(60, 60, 60, 0.1)',
+    backgroundColor: 'rgba(60, 60, 60, 0.2)',
+    borderColor: 'rgba(60, 60, 60, 0.3)',
   },
   voiceToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
+    paddingHorizontal: 25,
+    paddingVertical: 15,
+    borderRadius: 30,
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    backgroundColor: 'transparent',
-    gap: 8,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    gap: 10,
+    minWidth: 120,
   },
   voiceToggleActive: {
     backgroundColor: '#27ae60',
@@ -978,7 +1137,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   darkVoiceToggleText: {
-    color: '#e8e8e8',
+    color: '#ffffff',
   },
   lightVoiceToggleText: {
     color: '#3d3d3d',
@@ -987,23 +1146,57 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   voiceStatus: {
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
   },
   darkVoiceStatus: {
-    color: '#b0b0b0',
+    color: '#ffffff',
   },
   lightVoiceStatus: {
-    color: '#6a6a6a',
+    color: '#3d3d3d',
   },
   voiceStatusListening: {
     color: '#27ae60',
   },
-  listeningModal: {
-    flex: 1,
-    justifyContent: 'center',
+  voiceStatusContainer: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    marginTop: 10,
+    width: '100%',
+  },
+  environmentStatus: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    textAlign: 'center',
+  },
+  darkEnvironmentStatus: {
+    color: '#b0b0b0',
+  },
+  lightEnvironmentStatus: {
+    color: '#6a6a6a',
+  },
+  listeningModalOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    zIndex: 1000,
+    pointerEvents: 'box-none',
+  },
+  listeningModal: {
+    width: '90%',
+    maxHeight: '40%',
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    borderRadius: 20,
+    marginBottom: 20,
+    overflow: 'hidden',
   },
   darkListeningModal: {
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -1032,12 +1225,13 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   listeningContent: {
-    width: '90%',
+    width: '100%',
     alignItems: 'center',
+    padding: 20,
   },
   listeningWaiting: {
     alignItems: 'center',
-    padding: 40,
+    padding: 20,
   },
   listeningWaitingText: {
     fontSize: 18,
@@ -1063,9 +1257,9 @@ const styles = StyleSheet.create({
   },
   recitationInfo: {
     alignItems: 'center',
-    padding: 40,
+    padding: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
+    borderRadius: 15,
     width: '100%',
   },
   recitationLabel: {
@@ -1149,7 +1343,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(60, 60, 60, 0.1)',
   },
   pageContent: {
-    paddingBottom: 120, // Add extra padding for footer
+    paddingBottom: 200, // Add extra padding for footer and voice overlay
     alignItems: 'center',
     paddingHorizontal: 20,
   },
@@ -1369,11 +1563,13 @@ const styles = StyleSheet.create({
   },
   debugContainer: {
     width: '90%',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: 10,
-    padding: 15,
-    marginTop: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+    borderRadius: 15,
+    padding: 20,
+    marginTop: 15,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   debugTitle: {
     fontSize: 14,
@@ -1397,5 +1593,146 @@ const styles = StyleSheet.create({
   },
   lightDebugText: {
     color: '#3d3d3d',
+  },
+
+
+  currentVerseText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 10,
+    paddingHorizontal: 20,
+    lineHeight: 20,
+  },
+  darkCurrentVerseText: {
+    color: '#ffd700',
+  },
+  lightCurrentVerseText: {
+    color: '#5a5a5a',
+  },
+  currentWordHighlight: {
+    backgroundColor: 'rgba(255, 68, 68, 0.1)',
+    borderRadius: 10,
+    padding: 15,
+    marginTop: 15,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ff4444',
+  },
+  currentWordLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ff4444',
+    marginBottom: 5,
+  },
+  currentWordText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#ff4444',
+    fontFamily: Platform.OS === 'ios' ? 'Amiri' : 'serif',
+  },
+  debugInfo: {
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+    alignSelf: 'flex-start',
+    marginLeft: 20,
+  },
+  debugInfoText: {
+    fontSize: 12,
+    color: '#e8e8e8',
+  },
+  noSurahContainer: {
+    alignItems: 'center',
+    padding: 40,
+    width: '100%',
+  },
+  noSurahText: {
+    fontSize: 18,
+    color: '#3d3d3d',
+    marginBottom: 20,
+  },
+  darkNoSurahText: {
+    color: '#ffffff',
+  },
+  lightNoSurahText: {
+    color: '#3d3d3d',
+  },
+  loadSurahButton: {
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    backgroundColor: '#27ae60',
+  },
+  darkLoadSurahButton: {
+    backgroundColor: '#27ae60',
+  },
+  lightLoadSurahButton: {
+    backgroundColor: '#27ae60',
+  },
+  loadSurahButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingIndicator: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  loadingIndicatorText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 5,
+  },
+  darkLoadingIndicatorText: {
+    color: '#e8e8e8',
+  },
+  lightLoadingIndicatorText: {
+    color: '#3d3d3d',
+  },
+  manualLoadButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: '#27ae60',
+    marginLeft: 10,
+  },
+  darkManualLoadButton: {
+    backgroundColor: '#27ae60',
+  },
+  lightManualLoadButton: {
+    backgroundColor: '#27ae60',
+  },
+  manualLoadButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statusDebug: {
+    fontSize: 10,
+    fontWeight: '400',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  darkStatusDebug: {
+    color: '#b0b0b0',
+  },
+  lightStatusDebug: {
+    color: '#6a6a6a',
+  },
+  debugLoadButton: {
+    backgroundColor: '#ff6b6b',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 15,
+    marginTop: 10,
+  },
+  debugLoadButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

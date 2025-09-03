@@ -1,7 +1,7 @@
+import { auth } from '@/services/firebase';
 import { useRouter, useSegments } from 'expo-router';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth } from '../services/firebase';
 
 interface AuthContextType {
   user: User | null;

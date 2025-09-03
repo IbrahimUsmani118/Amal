@@ -11,7 +11,7 @@ import {
     View
 } from 'react-native';
 import { prayerTimeApi } from '../services/prayerTimeApi';
-import { Location } from '../types/common';
+import { Location } from '@/types/common';
 
 interface LocationSelectorProps {
   currentLocation: Location | null;
