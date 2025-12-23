@@ -5,18 +5,28 @@ import * as Speech from 'expo-speech';
 import { useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 
-// Import interruption modes - try direct import first, fallback to numeric values
+// Import interruption modes directly from expo-av (fixed import)
+// Try direct import first, fallback to numeric values if not available
 let InterruptionModeIOS, InterruptionModeAndroid;
 try {
-  // Try importing from expo-av (SDK 48+)
+  // Try direct import from expo-av
   const avModule = require('expo-av');
-  InterruptionModeIOS = avModule.InterruptionModeIOS;
-  InterruptionModeAndroid = avModule.InterruptionModeAndroid;
+  if (avModule.InterruptionModeIOS && avModule.InterruptionModeAndroid) {
+    InterruptionModeIOS = avModule.InterruptionModeIOS;
+    InterruptionModeAndroid = avModule.InterruptionModeAndroid;
+    console.log('✅ Interruption modes imported successfully');
+  } else {
+    // Fallback: Use numeric values
+    InterruptionModeIOS = { DoNotMix: 1, DuckOthers: 2 };
+    InterruptionModeAndroid = { DoNotMix: 1, DuckOthers: 2 };
+    console.log('⚠️ Using numeric fallback for interruption modes');
+  }
 } catch (e) {
   // Fallback: Use numeric values if enums aren't available
   // DoNotMix = 1, DuckOthers = 2
   InterruptionModeIOS = { DoNotMix: 1, DuckOthers: 2 };
   InterruptionModeAndroid = { DoNotMix: 1, DuckOthers: 2 };
+  console.log('⚠️ Using numeric fallback for interruption modes (import failed)');
 }
 
 class VoiceRecognitionService {
@@ -211,7 +221,7 @@ class VoiceRecognitionService {
       // This sets the audio session to 'Active' and category to 'PlayAndRecord' for iOS
       console.log('🎵 Configuring audio session...');
       try {
-        // Build minimal audio mode config (avoid interruption modes that might cause issues)
+        // Build audio mode config with proper interruption modes
         const audioModeConfig = {
           allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
@@ -220,14 +230,17 @@ class VoiceRecognitionService {
           playThroughEarpieceAndroid: false,
         };
 
-        // Only add interruption modes if they're properly available
-        try {
-          const iosMode = InterruptionModeIOS?.DoNotMix ?? 1;
-          const androidMode = InterruptionModeAndroid?.DoNotMix ?? 1;
-          audioModeConfig.interruptionModeIOS = iosMode;
-          audioModeConfig.interruptionModeAndroid = androidMode;
-        } catch (modeError) {
-          console.warn('⚠️ Could not set interruption modes, continuing without them:', modeError);
+        // Add interruption modes if available (fixed import)
+        if (InterruptionModeIOS && InterruptionModeIOS.DoNotMix !== undefined) {
+          audioModeConfig.interruptionModeIOS = InterruptionModeIOS.DoNotMix;
+        } else {
+          audioModeConfig.interruptionModeIOS = 1; // DoNotMix = 1
+        }
+        
+        if (InterruptionModeAndroid && InterruptionModeAndroid.DoNotMix !== undefined) {
+          audioModeConfig.interruptionModeAndroid = InterruptionModeAndroid.DoNotMix;
+        } else {
+          audioModeConfig.interruptionModeAndroid = 1; // DoNotMix = 1
         }
 
         await Audio.setAudioModeAsync(audioModeConfig);
@@ -236,12 +249,12 @@ class VoiceRecognitionService {
         // CRITICAL: Wait for audio session to fully activate before proceeding
         // This is essential for iOS - the session needs time to become active
         console.log('⏳ Waiting for audio session to activate...');
-        await new Promise(resolve => setTimeout(resolve, 200)); // Increased delay
+        await new Promise(resolve => setTimeout(resolve, 200));
         
         console.log('✅ Audio session should now be active');
       } catch (audioModeError) {
-        console.error('❌ Failed to configure audio mode:', audioModeError);
-        // Try minimal configuration as fallback
+        console.error('❌ Audio Mode Error:', audioModeError);
+        // Try minimal configuration as fallback (without interruption modes)
         try {
           await Audio.setAudioModeAsync({
             allowsRecordingIOS: true,
@@ -251,7 +264,6 @@ class VoiceRecognitionService {
             playThroughEarpieceAndroid: false,
           });
           console.log('✅ Audio session configured (minimal config)');
-          // Still wait for session activation
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (fallbackError) {
           console.error('❌ Fallback audio configuration also failed:', fallbackError);
@@ -262,177 +274,78 @@ class VoiceRecognitionService {
         }
       }
 
-      // Step 3: Create recording options optimized for speech recognition
-      const recordingOptions = {
-        android: {
-          extension: '.m4a',
-          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-          audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: '.m4a',
-          outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-          audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 128000,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-        },
-        web: {
-          mimeType: 'audio/webm',
-          bitsPerSecond: 128000,
-        },
-      };
+      // Step 3: Clear any existing recording before creating new one
+      if (this.recording) {
+        try {
+          console.log('🧹 Cleaning up existing recording...');
+          await this.recording.stopAndUnloadAsync();
+          this.recording = null;
+        } catch (cleanupError) {
+          console.warn('⚠️ Error cleaning up existing recording:', cleanupError);
+          this.recording = null;
+        }
+      }
 
-      // Step 4: Create recording with proper initialization flow
-      // Recommended flow: Request Permissions → Set Mode → Wait → Initialize Recording
+      // Step 4: Create recording using the most stable approach
+      // Use createAsync which handles Prepare AND Start in one call (most stable in Expo)
       let recording = null;
       
-      // Log recorder status before attempting to create
-      console.log('📝 Pre-recording status check:');
-      console.log('  - isListening:', this.isListening);
-      console.log('  - existing recording:', !!this.recording);
-      console.log('  - Platform:', Platform.OS);
-      
-      // Try the simplest approach first: createAsync with minimal options
-      // This is the most reliable method according to expo-av docs
       try {
-        console.log('🎤 Attempting to create recording with createAsync...');
+        console.log('🎤 Creating recording with createAsync (most stable method)...');
         
-        // Use createAsync - it handles preparation internally
-        // Pass null for onRecordingStatusUpdate to reduce overhead
-        const result = await Audio.Recording.createAsync(
+        // Use optimized recording options for speech recognition
+        const recordingOptions = {
+          android: {
+            extension: '.m4a',
+            outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+            audioEncoder: Audio.AndroidAudioEncoder.AAC,
+            sampleRate: 16000,
+            numberOfChannels: 1,
+            bitRate: 128000,
+          },
+          ios: {
+            extension: '.m4a',
+            outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+            audioQuality: Audio.IOSAudioQuality.HIGH,
+            sampleRate: 16000,
+            numberOfChannels: 1,
+            bitRate: 128000,
+            linearPCMBitDepth: 16,
+            linearPCMIsBigEndian: false,
+            linearPCMIsFloat: false,
+          },
+          web: {
+            mimeType: 'audio/webm',
+            bitsPerSecond: 128000,
+          },
+        };
+        
+        // createAsync handles prepareToRecordAsync internally - this is the most stable approach
+        const { recording: newRecording } = await Audio.Recording.createAsync(
           recordingOptions,
-          null, // No status callback to reduce overhead
+          null, // No status callback
           0 // No update interval
         );
         
-        recording = result.recording;
-        
-        // Verify recording object exists
-        if (!recording) {
+        if (!newRecording) {
           throw new Error('Recording object is null after createAsync');
         }
         
-        // Verify recording has required methods
-        if (typeof recording.startAsync !== 'function') {
-          throw new Error('Recording object missing startAsync method');
-        }
+        recording = newRecording;
+        console.log('✅ Recording created and started successfully');
         
-        // Wait a bit to ensure recording is fully ready
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        console.log('✅ Recording created successfully with createAsync');
-        console.log('📊 Recorder verified:', {
-          exists: !!recording,
-          hasStartMethod: typeof recording.startAsync === 'function',
-          hasStopMethod: typeof recording.stopAndUnloadAsync === 'function'
+      } catch (err) {
+        console.error('❌ Failed to start recording:', err);
+        console.error('📝 Error details:', {
+          message: err.message,
+          code: err.code,
+          stack: err.stack
         });
         
-      } catch (createError) {
-        console.error('❌ createAsync failed:', createError.message);
-        console.error('📝 Error code:', createError.code);
-        
-        // If createAsync fails, the audio session might not be ready
-        // Try resetting audio mode and retrying once
-        if (createError.code === 'E_AUDIO_RECORDERNOTCREATED' || 
-            createError.message.includes('not prepared')) {
-          console.log('🔄 Audio session issue detected, resetting and retrying...');
-          
-          try {
-            // Reset audio mode
-            await Audio.setAudioModeAsync({
-              allowsRecordingIOS: false,
-            });
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // Reconfigure for recording
-            await Audio.setAudioModeAsync({
-              allowsRecordingIOS: true,
-              playsInSilentModeIOS: true,
-              staysActiveInBackground: false,
-              shouldDuckAndroid: true,
-              playThroughEarpieceAndroid: false,
-            });
-            await new Promise(resolve => setTimeout(resolve, 200));
-            
-            // Retry createAsync
-            console.log('🔄 Retrying createAsync after audio reset...');
-            const retryResult = await Audio.Recording.createAsync(
-              recordingOptions,
-              null,
-              0
-            );
-            
-            recording = retryResult.recording;
-            if (recording) {
-              console.log('✅ Recording created successfully after retry');
-              await new Promise(resolve => setTimeout(resolve, 100));
-            } else {
-              throw new Error('Recording is null after retry');
-            }
-            
-          } catch (retryError) {
-            console.error('❌ Retry also failed:', retryError.message);
-            // Fall through to manual preparation
-            recording = null;
-          }
+        if (this.onErrorCallback) {
+          this.onErrorCallback(`Recording failed: ${err.message}`);
         }
-        
-        // If still no recording, try manual preparation as last resort
-        if (!recording) {
-          console.log('🔄 Attempting manual prepareAsync as last resort...');
-          try {
-            recording = new Audio.Recording();
-            
-            if (!recording) {
-              throw new Error('Failed to create Recording instance');
-            }
-            
-            // Prepare with explicit await
-            console.log('🎤 Preparing recorder...');
-            await recording.prepareToRecordAsync(recordingOptions);
-            console.log('✅ Recorder prepared');
-            
-            // Wait for preparation to complete
-            await new Promise(resolve => setTimeout(resolve, 150));
-            
-            // Start recording
-            console.log('🎤 Starting recording...');
-            await recording.startAsync();
-            console.log('✅ Recording started with manual preparation');
-            
-          } catch (prepareError) {
-            console.error('❌ All recording methods failed');
-            console.error('📝 Final error:', {
-              message: prepareError.message,
-              code: prepareError.code
-            });
-            
-            // Clean up
-            if (recording) {
-              try {
-                // Don't try to unload if not prepared
-                if (prepareError.message && !prepareError.message.includes('not prepared')) {
-                  await recording.stopAndUnloadAsync();
-                }
-              } catch (cleanupError) {
-                // Ignore cleanup errors
-              }
-              recording = null;
-            }
-            
-            if (this.onErrorCallback) {
-              this.onErrorCallback(`Recording failed: ${prepareError.message}`);
-            }
-            return false;
-          }
-        }
+        return false;
       }
 
       // Step 5: Verify recording was created and is ready
