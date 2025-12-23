@@ -3,6 +3,7 @@
     "name": "Amal",
     "slug": "Amal",
     "version": "1.0.0",
+    "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "amal",
@@ -11,12 +12,12 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app needs access to microphone for voice recognition during Quran recitation.",
-        "NSSpeechRecognitionUsageDescription": "This app needs speech recognition to follow along with Quran recitation.",
         "NSLocationWhenInUseUsageDescription": "This app needs location access to provide accurate prayer times and qibla direction.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs location access to provide accurate prayer times and qibla direction.",
         "NSCameraUsageDescription": "This app may need camera access for future features.",
         "NSPhotoLibraryUsageDescription": "This app may need photo library access for future features.",
+        "NSMicrophoneUsageDescription": "This app needs microphone access for voice recognition and Quran recitation features.",
+        "NSSpeechRecognitionUsageDescription": "This app needs speech recognition access to help you find Quran verses by speaking.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.ibrahimusmani.Amal"
@@ -40,11 +41,6 @@
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
     "plugins": [
       "expo-router",
       [
@@ -59,11 +55,25 @@
       "expo-sqlite",
       "expo-secure-store",
       "expo-localization",
-      "@react-native-voice/voice",
-      "expo-web-browser"
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24,
+            "packagingOptions": {
+              "pickFirst": ["libc++_shared.so"]
+            }
+          },
+          "ios": {
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": false
     },
     "extra": {
       "eas": {
