@@ -32,9 +32,13 @@ try {
 class VoiceRecognitionService {
   constructor() {
     this.isListening = false;
+    this.isPreparing = false; // Flag to prevent double-triggering
+    this.isUploading = false; // Flag to track upload status
+    this.uploadProgress = 0; // Upload progress (0-100)
     this.onResultCallback = null;
     this.onErrorCallback = null;
     this.onEndCallback = null;
+    this.onProgressCallback = null; // Progress callback
     this.currentLanguage = 'en-US';
     this.recognition = null; // Web Speech API recognition instance
     this.recording = null; // expo-av recording instance
@@ -190,243 +194,136 @@ class VoiceRecognitionService {
   }
 
   // Start mobile recording using expo-av
+  // Fix for "recorder not prepared" crash with strict canRecord check
   async startMobileRecording(language = 'en-US') {
-    try {
-      // Check if recording is already in progress to prevent collisions
-      if (this.isListening || this.recording) {
-        console.warn('⚠️ Recording already in progress, stopping existing recording first');
-        try {
-          await this.stopListening();
-          // Small delay to ensure cleanup completes
-          await new Promise(resolve => setTimeout(resolve, 100));
-        } catch (stopError) {
-          console.warn('Error stopping existing recording:', stopError);
-        }
-      }
+    // 1. Safety Check: Don't start if already busy
+    if (this.isPreparing || this.recording) {
+      console.warn('⚠️ Recorder is busy. Ignoring start request.');
+      return false;
+    }
 
-      // Step 1: Request and await permissions FIRST
-      console.log('🔐 Requesting audio recording permissions...');
+    this.isPreparing = true;
+    
+    try {
+      // 2. Permissions
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
-        const errorMsg = 'Audio recording permission denied';
-        console.error('❌', errorMsg);
-        if (this.onErrorCallback) {
-          this.onErrorCallback(errorMsg);
-        }
-        return false;
-      }
-      console.log('✅ Audio permissions granted');
-
-      // Step 2: Configure audio mode with PlayAndRecord category BEFORE any recording operations
-      // This sets the audio session to 'Active' and category to 'PlayAndRecord' for iOS
-      console.log('🎵 Configuring audio session...');
-      try {
-        // Build audio mode config with proper interruption modes
-        const audioModeConfig = {
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        };
-
-        // Add interruption modes if available (fixed import)
-        if (InterruptionModeIOS && InterruptionModeIOS.DoNotMix !== undefined) {
-          audioModeConfig.interruptionModeIOS = InterruptionModeIOS.DoNotMix;
-        } else {
-          audioModeConfig.interruptionModeIOS = 1; // DoNotMix = 1
-        }
-        
-        if (InterruptionModeAndroid && InterruptionModeAndroid.DoNotMix !== undefined) {
-          audioModeConfig.interruptionModeAndroid = InterruptionModeAndroid.DoNotMix;
-        } else {
-          audioModeConfig.interruptionModeAndroid = 1; // DoNotMix = 1
-        }
-
-        await Audio.setAudioModeAsync(audioModeConfig);
-        console.log('✅ Audio session configured successfully');
-        
-        // CRITICAL: Wait for audio session to fully activate before proceeding
-        // This is essential for iOS - the session needs time to become active
-        console.log('⏳ Waiting for audio session to activate...');
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        console.log('✅ Audio session should now be active');
-      } catch (audioModeError) {
-        console.error('❌ Audio Mode Error:', audioModeError);
-        // Try minimal configuration as fallback (without interruption modes)
-        try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: true,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
-            playThroughEarpieceAndroid: false,
-          });
-          console.log('✅ Audio session configured (minimal config)');
-          await new Promise(resolve => setTimeout(resolve, 200));
-        } catch (fallbackError) {
-          console.error('❌ Fallback audio configuration also failed:', fallbackError);
-          if (this.onErrorCallback) {
-            this.onErrorCallback(`Audio configuration failed: ${fallbackError.message}`);
-          }
-          return false;
-        }
+        throw new Error('Permission denied');
       }
 
-      // Step 3: Clear any existing recording before creating new one
-      if (this.recording) {
-        try {
-          console.log('🧹 Cleaning up existing recording...');
-          await this.recording.stopAndUnloadAsync();
-          this.recording = null;
-        } catch (cleanupError) {
-          console.warn('⚠️ Error cleaning up existing recording:', cleanupError);
-          this.recording = null;
-        }
-      }
-
-      // Step 4: Create recording using the most stable approach
-      // Use createAsync which handles Prepare AND Start in one call (most stable in Expo)
-      let recording = null;
-      
-      try {
-        console.log('🎤 Creating recording with createAsync (most stable method)...');
-        
-        // Use optimized recording options for speech recognition
-        const recordingOptions = {
-          android: {
-            extension: '.m4a',
-            outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-            audioEncoder: Audio.AndroidAudioEncoder.AAC,
-            sampleRate: 16000,
-            numberOfChannels: 1,
-            bitRate: 128000,
-          },
-          ios: {
-            extension: '.m4a',
-            outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-            audioQuality: Audio.IOSAudioQuality.HIGH,
-            sampleRate: 16000,
-            numberOfChannels: 1,
-            bitRate: 128000,
-            linearPCMBitDepth: 16,
-            linearPCMIsBigEndian: false,
-            linearPCMIsFloat: false,
-          },
-          web: {
-            mimeType: 'audio/webm',
-            bitsPerSecond: 128000,
-          },
-        };
-        
-        // createAsync handles prepareToRecordAsync internally - this is the most stable approach
-        const { recording: newRecording } = await Audio.Recording.createAsync(
-          recordingOptions,
-          null, // No status callback
-          0 // No update interval
-        );
-        
-        if (!newRecording) {
-          throw new Error('Recording object is null after createAsync');
-        }
-        
-        recording = newRecording;
-        console.log('✅ Recording created and started successfully');
-        
-      } catch (err) {
-        console.error('❌ Failed to start recording:', err);
-        console.error('📝 Error details:', {
-          message: err.message,
-          code: err.code,
-          stack: err.stack
-        });
-        
-        if (this.onErrorCallback) {
-          this.onErrorCallback(`Recording failed: ${err.message}`);
-        }
-        return false;
-      }
-
-      // Step 5: Verify recording was created and is ready
-      if (!recording) {
-        const errorMsg = 'Recording object is null after creation';
-        console.error('❌', errorMsg);
-        if (this.onErrorCallback) {
-          this.onErrorCallback(errorMsg);
-        }
-        return false;
-      }
-
-      // Final verification: Check if recording has the necessary methods
-      if (typeof recording.startAsync !== 'function' || 
-          typeof recording.stopAndUnloadAsync !== 'function') {
-        const errorMsg = 'Recording object is missing required methods';
-        console.error('❌', errorMsg);
-        try {
-          await recording.stopAndUnloadAsync();
-        } catch (e) {
-          // Ignore cleanup errors
-        }
-        if (this.onErrorCallback) {
-          this.onErrorCallback(errorMsg);
-        }
-        return false;
-      }
-
-      // Store recording reference and update state
-      this.recording = recording;
-      this.isListening = true;
-      console.log('🎤 Recording started successfully (mobile)');
-      console.log('📊 Final recorder status:', {
-        isListening: this.isListening,
-        hasRecording: !!this.recording,
-        hasStartMethod: typeof this.recording?.startAsync === 'function',
-        hasStopMethod: typeof this.recording?.stopAndUnloadAsync === 'function'
+      // 3. Audio Mode Setup (Crucial for iOS)
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
       });
-      
-      // Note: Mobile recording works, but transcription requires a speech recognition API
-      // For web, Web Speech API provides real-time transcription
-      // For mobile, you can integrate with:
-      // - Google Cloud Speech-to-Text API
-      // - AWS Transcribe
-      // - Azure Speech Services
-      // - Or use whisper.rn for offline speech-to-text
 
+      // 4. Cleanup any stuck recordings
+      if (this.recording) {
+        try { 
+          await this.recording.stopAndUnloadAsync(); 
+        } catch (e) { 
+          // ignore cleanup errors 
+        }
+        this.recording = null;
+      }
+
+      // 5. Create & Prepare using createAsync (handles both prepare and start)
+      // Use optimized recording options for speech recognition
+      const recordingOptions = {
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+      };
+      
+      const { recording } = await Audio.Recording.createAsync(recordingOptions);
+      
+      this.recording = recording;
+      
+      // 6. Verification check (The fix for your specific error)
+      const statusCheck = await this.recording.getStatusAsync();
+      if (!statusCheck.canRecord) {
+        throw new Error('Recorder prepared but signal is not ready (canRecord=false)');
+      }
+
+      console.log('✅ Recorder started successfully');
+      this.isListening = true;
       return true;
+
     } catch (error) {
-      console.error('❌ Error starting mobile recording:', error);
-      console.error('📝 Error stack:', error.stack);
-      this.isListening = false;
+      console.error('❌ Failed to start recording:', error);
+      
+      // Cleanup on failure
       this.recording = null;
+      this.isListening = false;
       
       if (this.onErrorCallback) {
-        this.onErrorCallback(error.message || 'Failed to start recording');
+        this.onErrorCallback(error.message);
       }
       return false;
+    } finally {
+      this.isPreparing = false; // Always release the lock
     }
   }
 
-  // Process recorded audio (placeholder for API integration)
-  async processRecording(uri) {
-    // This is where you would integrate with a speech recognition API
-    // Example integration points:
-    // 1. Google Cloud Speech-to-Text
-    // 2. AWS Transcribe
-    // 3. Azure Speech Services
-    // 4. Or use development build with native modules
-    
-    console.log('Audio recorded at:', uri);
-    console.log('To enable transcription, integrate with a speech recognition API');
-    
-    // For now, return empty transcript
-    // In production, you would:
-    // 1. Read the audio file
-    // 2. Send it to your speech recognition API
-    // 3. Get the transcript
-    // 4. Call this.onResultCallback with the result
-    
-    return null;
+  // Process recorded audio - Generic Backend Implementation
+  // Uploads audio to backend API for transcription
+  async processRecording(uri, onProgress = null) {
+    if (!uri) {
+      console.warn('⚠️ No audio URI provided for processing');
+      return;
+    }
+
+    console.log('📤 Uploading audio to backend:', uri);
+
+    try {
+      // Import backend API service
+      const { backendApiService } = require('./backendApi');
+      
+      // Use backend API service for transcription with progress tracking
+      const result = await backendApiService.transcribeAudio(
+        uri,
+        this.currentLanguage,
+        onProgress
+      );
+
+      if (result.success) {
+        console.log('✅ Transcription received:', result.text);
+
+        // Send result back to UI
+        if (this.onResultCallback) {
+          this.onResultCallback({
+            transcript: result.text,
+            isFinal: true,
+            confidence: result.confidence || 1.0,
+          });
+        }
+      } else {
+        throw new Error(result.error || 'Transcription failed');
+      }
+
+    } catch (error) {
+      console.error('❌ Upload failed:', error);
+      
+      // Retry logic (optional - can be enhanced)
+      if (this.onErrorCallback) {
+        this.onErrorCallback('Transcription failed: ' + error.message);
+      }
+    }
   }
 
   // Process and handle recording completion
@@ -437,10 +334,17 @@ class VoiceRecognitionService {
 
     try {
       this.recordingUri = uri;
+      this.isUploading = true;
+      this.uploadProgress = 0;
       console.log('Recording saved to:', uri);
 
-      // Process the recording (integrate with API here)
-      await this.processRecording(uri);
+      // Process the recording with progress tracking
+      await this.processRecording(uri, (progress) => {
+        this.uploadProgress = progress;
+        if (this.onProgressCallback) {
+          this.onProgressCallback(progress);
+        }
+      });
 
       // Notify that recording is complete
       if (this.onEndCallback) {
@@ -451,17 +355,34 @@ class VoiceRecognitionService {
       if (this.onErrorCallback) {
         this.onErrorCallback(error.message);
       }
+    } finally {
+      this.isUploading = false;
+      this.uploadProgress = 0;
     }
+  }
+
+  // Set progress callback
+  setOnProgress(callback) {
+    this.onProgressCallback = callback;
+  }
+
+  // Get upload status
+  getUploadStatus() {
+    return {
+      isUploading: this.isUploading,
+      progress: this.uploadProgress,
+    };
   }
 
   // Stop listening for voice input
   async stopListening() {
     try {
-      if (!this.isListening) {
+      if (!this.isListening && !this.isPreparing) {
         return;
       }
 
       this.isListening = false;
+      this.isPreparing = false; // Reset preparing flag
 
       // Stop Web Speech API
       if (this.recognition) {
@@ -567,6 +488,17 @@ class VoiceRecognitionService {
   // Set end callback
   setOnEnd(callback) {
     this.onEndCallback = callback;
+  }
+
+  // Test backend connection
+  async testBackendConnection() {
+    try {
+      const { backendApiService } = require('./backendApi');
+      return await backendApiService.testConnection();
+    } catch (error) {
+      console.error('Backend connection test failed:', error);
+      return { success: false, error: error.message };
+    }
   }
 
   // Text-to-speech functionality

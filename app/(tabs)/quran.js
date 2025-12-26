@@ -150,6 +150,8 @@ export default function QuranScreen() {
     const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
     const [voiceTranscript, setVoiceTranscript] = useState('');
     const [isListening, setIsListening] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [targetAyah, setTargetAyah] = useState(null);
     const [voiceText, setVoiceText] = useState('');
     const flatListRef = useRef(null);
@@ -211,11 +213,19 @@ export default function QuranScreen() {
             voiceRecognitionService.setOnError((error) => {
                 console.error('Voice recognition error:', error);
                 setIsListening(false);
+                setIsUploading(false);
                 Alert.alert('Voice Error', error);
             });
 
             voiceRecognitionService.setOnEnd(() => {
                 setIsListening(false);
+                setIsUploading(false);
+            });
+
+            // Track upload progress
+            voiceRecognitionService.setOnProgress((progress) => {
+                setUploadProgress(progress);
+                setIsUploading(true);
             });
         }
 
@@ -223,6 +233,7 @@ export default function QuranScreen() {
             voiceRecognitionService.setOnResult(null);
             voiceRecognitionService.setOnError(null);
             voiceRecognitionService.setOnEnd(null);
+            voiceRecognitionService.setOnProgress(null);
         };
     }, [showVoiceRecorder]);
 
@@ -471,8 +482,17 @@ export default function QuranScreen() {
                                     />
                                 </TouchableOpacity>
                                 <Text style={[styles.voiceStatusText, { color: colors.textSecondary }]}>
-                                    {isListening ? 'Listening... Speak a verse or surah name' : 'Tap to start voice recognition'}
+                                    {isUploading 
+                                        ? `Uploading... ${Math.round(uploadProgress)}%`
+                                        : isListening 
+                                            ? 'Listening... Speak a verse or surah name' 
+                                            : 'Tap to start voice recognition'}
                                 </Text>
+                                {isUploading && (
+                                    <View style={styles.progressBarContainer}>
+                                        <View style={[styles.progressBar, { width: `${uploadProgress}%` }]} />
+                                    </View>
+                                )}
                             </View>
                             
                             {voiceText && (
@@ -700,6 +720,20 @@ const styles = StyleSheet.create({
     voiceStatusText: {
         fontSize: 14,
         textAlign: 'center',
+        marginBottom: 8,
+    },
+    progressBarContainer: {
+        width: '100%',
+        height: 4,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        borderRadius: 2,
+        overflow: 'hidden',
+        marginTop: 8,
+    },
+    progressBar: {
+        height: '100%',
+        backgroundColor: '#ffd700',
+        borderRadius: 2,
     },
     transcriptContainer: {
         padding: 12,

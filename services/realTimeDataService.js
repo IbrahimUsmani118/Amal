@@ -23,7 +23,7 @@ class RealTimeDataService {
             PRAYER_TIMES: 60000, // 1 minute
             QIBLA: 5000, // 5 seconds for smooth compass movement
             LOCATION: 30000, // 30 seconds
-            VOICE_RECOGNITION: 1000, // 1 second for real-time voice processing
+            // VOICE_RECOGNITION removed - polling conflicts with recorder initialization
         };
         
         this.initializeService();
