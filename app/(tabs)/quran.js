@@ -428,7 +428,7 @@ export default function QuranScreen() {
             {/* Universal Header */}
             <UniversalHeader />
             
-            <View style={styles.content}>
+            <View style={[styles.content, { paddingBottom: insets.bottom + 100 }]}>
                 {/* Page Header */}
                 <View style={styles.header}>
                     <View style={styles.headerTop}>
@@ -553,7 +553,7 @@ export default function QuranScreen() {
                         data={surahs.length > 0 ? surahs : SURAHS}
                         renderItem={renderSurahItem}
                         keyExtractor={(item) => item.number.toString()}
-                        contentContainerStyle={styles.listContainer}
+                        contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 20 }]}
                         showsVerticalScrollIndicator={false}
                         removeClippedSubviews={true}
                         initialNumToRender={20}
@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        paddingBottom: 100, // Space for footer
+        // paddingBottom will be set dynamically with safe area insets
     },
     header: {
         padding: 20,
