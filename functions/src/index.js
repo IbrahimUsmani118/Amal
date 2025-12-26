@@ -3,6 +3,7 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onRequest} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
+const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const {Storage} = require("@google-cloud/storage");
 const OpenAI = require("openai");
@@ -349,5 +350,133 @@ exports.cleanupOldCommands = onSchedule(
 // Simple test endpoint
 exports.helloWorld = onRequest((request, response) => {
   response.json({message: "Firebase Cloud Functions initialized"});
+});
+
+/**
+ * Storage trigger that processes audio files uploaded to voice-commands/{userId}/{fileId}.m4a
+ * Downloads the file, transcribes it with OpenAI Whisper, and saves the transcript to Firestore
+ */
+exports.onAudioUpload = functions.storage.object().onFinalize(async (object) => {
+  const filePath = object.name;
+  const bucketName = object.bucket;
+
+  // Only process files matching voice-commands/{userId}/{fileId}.m4a pattern
+  if (!filePath || !filePath.startsWith("voice-commands/")) {
+    console.log("File not in voice-commands path, skipping:", filePath);
+    return null;
+  }
+
+  // Check if file is .m4a format
+  if (!filePath.endsWith(".m4a")) {
+    console.log("File is not .m4a format, skipping:", filePath);
+    return null;
+  }
+
+  // Extract userId and fileId from path: voice-commands/{userId}/{fileId}.m4a
+  const pathParts = filePath.split("/");
+  if (pathParts.length < 3) {
+    console.log("Invalid path structure, skipping:", filePath);
+    return null;
+  }
+
+  const userId = pathParts[1];
+  const fileName = pathParts[2];
+  const fileId = fileName.replace(/\.m4a$/, ""); // Remove .m4a extension
+
+  console.log(`Processing audio upload: userId=${userId}, fileId=${fileId}`);
+
+  // Create Firestore document reference
+  const commandRef = admin.firestore().collection("commands").doc(fileId);
+
+  let tempFilePath = null;
+
+  try {
+    // Download file to temporary location
+    const bucket = storage.bucket(bucketName);
+    const file = bucket.file(filePath);
+    tempFilePath = path.join(os.tmpdir(), `${fileId}-${Date.now()}.m4a`);
+    
+    await file.download({destination: tempFilePath});
+    console.log(`Downloaded file to: ${tempFilePath}`);
+
+    // Get OpenAI client
+    const openaiClient = getOpenAIClient();
+
+    // Transcribe audio using OpenAI Whisper
+    const transcriptionResponse = await openaiClient.audio.transcriptions.create({
+      file: fs.createReadStream(tempFilePath),
+      model: "whisper-1",
+      language: "en", // Adjust if needed for Arabic/other languages
+    });
+
+    const transcript = transcriptionResponse.text;
+    console.log(`Transcription: ${transcript}`);
+
+    // Ensure Quran data is loaded
+    await loadQuranData();
+    if (!quranSearchService.isDataLoaded()) {
+      throw new Error("Quran data not available");
+    }
+
+    // Search for the best matching Quran verse
+    const searchResults = quranSearchService.findVerse(transcript, 1);
+    let quranMatch = null;
+    
+    if (searchResults && searchResults.length > 0) {
+      const bestMatch = searchResults[0];
+      quranMatch = {
+        surah: bestMatch.surah,
+        ayah: bestMatch.ayah,
+        arabic: bestMatch.arabic,
+        english: bestMatch.english,
+        confidence: bestMatch.confidence,
+      };
+      console.log(`Found matching verse: Surah ${bestMatch.surah}, Ayah ${bestMatch.ayah}`);
+    } else {
+      console.log("No matching verse found for transcript");
+    }
+
+    // Save transcript and quranMatch to Firestore and set status to completed
+    const updateData = {
+      status: "completed",
+      transcript: transcript,
+      userId: userId,
+      filePath: filePath,
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // Add quranMatch if a match was found
+    if (quranMatch) {
+      updateData.quranMatch = quranMatch;
+    }
+
+    await commandRef.set(updateData, {merge: true});
+
+    console.log(`Successfully processed audio upload: ${fileId}`);
+    return null;
+  } catch (error) {
+    console.error(`Error processing audio upload ${fileId}:`, error);
+    
+    // Update Firestore with error status
+    await commandRef.set({
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+      errorAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, {merge: true}).catch((err) => {
+      console.error("Failed to update error status:", err);
+    });
+
+    return null;
+  } finally {
+    // Clean up temporary file if it exists
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+        console.log(`Cleaned up temp file: ${tempFilePath}`);
+      } catch (unlinkError) {
+        console.error("Failed to clean up temp file:", unlinkError);
+      }
+    }
+  }
 });
 
