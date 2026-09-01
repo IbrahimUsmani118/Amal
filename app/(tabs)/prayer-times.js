@@ -427,7 +427,7 @@ export default function PrayerTimesScreen() {
               Today's Prayer Times
             </Text>
             <Text style={[styles.timezoneNote, { color: colors.textSecondary }]}>
-              Times shown are in {currentLocation?.city}'s local timezone
+              Times shown in {currentLocation?.city} local timezone
             </Text>
             {prayerTimes.map((prayer, index) => (
               <View

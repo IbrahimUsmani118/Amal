@@ -2,7 +2,7 @@
 #
 .DS_Store
 
-services/firebase.ts
+services/firebase.js
 
 # Xcode
 #
