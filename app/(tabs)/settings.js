@@ -71,23 +71,6 @@ export default function SettingsScreen() {
         }
     };
 
-    const clearCache = async () => {
-        try {
-            Alert.alert('Cache Cleared', 'App cache has been cleared.');
-        } catch (error) {
-            console.error('Error clearing cache:', error);
-            Alert.alert('Error', 'Failed to clear cache. Please try again.');
-        }
-    };
-
-    const downloadQuran = async () => {
-        try {
-            Alert.alert('Download', 'Quran download feature coming soon.');
-        } catch (error) {
-            console.error('Error downloading Quran:', error);
-            Alert.alert('Error', 'Failed to download Quran. Please try again.');
-        }
-    };
 
     if (loading || !settings) {
         return (
@@ -116,38 +99,11 @@ export default function SettingsScreen() {
                         updateSetting('theme', 'mode', newTheme);
                     },
                 },
-                {
-                    icon: 'text-outline',
-                    label: 'Font Size',
-                    type: 'select',
-                    value: settings.theme.fontSize,
-                    onPress: () => {
-                        Alert.alert('Font Size', 'Font size picker coming soon.');
-                    },
-                },
-                {
-                    icon: 'language-outline',
-                    label: 'Language',
-                    type: 'select',
-                    value: 'English',
-                    onPress: () => {
-                        Alert.alert('Language', 'Language picker coming soon.');
-                    },
-                },
             ],
         },
         {
-            title: 'Quran Settings',
+            title: 'Quran Display',
             items: [
-                {
-                    icon: 'book-outline',
-                    label: 'Default Translation',
-                    type: 'select',
-                    value: 'English',
-                    onPress: () => {
-                        Alert.alert('Translation', 'Translation picker coming soon.');
-                    },
-                },
                 {
                     icon: 'eye-outline',
                     label: 'Show Verse Numbers',
@@ -203,7 +159,7 @@ export default function SettingsScreen() {
             ],
         },
         {
-            title: 'Location & Prayer',
+            title: 'Location',
             items: [
                 {
                     icon: 'location-outline',
@@ -218,30 +174,6 @@ export default function SettingsScreen() {
                     type: 'toggle',
                     value: settings.location.qiblaCompass,
                     onValueChange: (value) => updateSetting('location', 'qiblaCompass', value),
-                },
-            ],
-        },
-        {
-            title: 'Data & Storage',
-            items: [
-                {
-                    icon: 'cloud-download-outline',
-                    label: 'Offline Mode',
-                    type: 'toggle',
-                    value: settings.storage.offlineMode,
-                    onValueChange: (value) => updateSetting('storage', 'offlineMode', value),
-                },
-                {
-                    icon: 'trash-outline',
-                    label: 'Clear Cache',
-                    type: 'button',
-                    onPress: clearCache,
-                },
-                {
-                    icon: 'download-outline',
-                    label: 'Download Quran',
-                    type: 'button',
-                    onPress: downloadQuran,
                 },
             ],
         },

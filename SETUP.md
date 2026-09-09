@@ -1,107 +1,79 @@
 # Amal Quran App - Setup Guide
 
 ## Overview
-Amal is an enhanced Quran reader app with voice recognition capabilities, designed to help users follow along with Quran recitation in real-time.
+
+Amal is a Quran reader app with voice recognition, prayer times, and Qibla compass features.
 
 ## Features
-- **Quran Reading**: Browse and read Quran with Arabic text and translations
-- **Voice Recognition**: Real-time Quran recitation detection using speech recognition
-- **Prayer Times**: Daily prayer schedule with location-based calculations
-- **Qibla Direction**: Compass pointing towards the Kaaba
-- **User Authentication**: Firebase-based login/signup with email verification
-- **Settings**: Customizable app preferences and user profile management
+
+- **Quran Reading** - Browse all 114 surahs with Arabic text and translations
+- **Voice Navigation** - Navigate by speaking surah names or reciting verses
+- **Prayer Times** - Location-based daily prayer schedule
+- **Qibla Direction** - Compass pointing to the Kaaba
+- **User Authentication** - Firebase-based login/signup
 
 ## Prerequisites
-- Node.js (v18 or higher)
-- Expo CLI
-- Firebase project
-- iOS Simulator or Android Emulator (for testing)
+
+- Node.js (v16 or higher)
+- npm or yarn
+- Expo CLI (`npm install -g expo-cli`)
+- Expo Go app (for testing on device)
 
 ## Installation
 
 ### 1. Clone the Repository
+
 ```bash
 git clone <repository-url>
 cd Amal
 ```
 
 ### 2. Install Dependencies
+
 ```bash
 npm install
 ```
 
 ### 3. Firebase Setup
-1. Create a new Firebase project at [Firebase Console](https://console.firebase.google.com/)
+
+1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com/)
 2. Enable Authentication with Email/Password
-3. Enable Email verification
-4. Copy your Firebase config to `services/firebase.ts`:
-```typescript
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID"
-};
-```
+3. Copy your Firebase config to `services/firebase.js`
 
-### 4. Speech Recognition Setup
-The app uses `expo-speech-recognition` for voice recognition. This requires:
+See `FIREBASE_SETUP.md` for detailed instructions.
 
-#### For Development:
+### 4. Start Development
+
 ```bash
-npx expo run:ios     # iOS
-npx expo run:android # Android
+npm start
 ```
 
-#### For Production:
-```bash
-eas build --platform ios
-eas build --platform android
-```
-
-**Note**: Speech recognition won't work in Expo Go due to native dependencies.
+Scan the QR code with Expo Go (Android) or Camera app (iOS).
 
 ## Project Structure
 
 ```
 app/
-├── (tabs)/           # Main app tabs
-│   ├── index.tsx     # Quran reader
-│   ├── prayer-times.tsx
-│   ├── qibla.tsx
-│   └── settings.tsx
-├── _layout.tsx       # Root layout
-├── index.tsx         # Entry point with routing
-├── login.tsx         # Login screen
-├── signup.tsx        # Signup screen
-├── verify-email.tsx  # Email verification
-└── forgot-password.tsx
+├── (tabs)/               # Main app tabs
+│   ├── quran.js          # Quran reader with voice search
+│   ├── prayer-times.js   # Prayer times display
+│   ├── qibla.js          # Qibla compass
+│   └── settings.js       # App settings
+├── _layout.js            # Root layout
+├── login.js              # Login screen
+├── signup.js             # Signup screen
+└── forgot-password.js    # Password reset
+
+services/
+├── quranApi.js           # Al-Quran Cloud API
+├── firebase.js           # Firebase auth
+├── voiceRecognition.js   # Voice input
+├── prayerTimeApi.js      # Prayer times
+└── qiblaApi.js           # Qibla direction
 ```
 
-## Key Components
+## Running the App
 
-### Authentication Flow
-1. User signs up → Email verification sent
-2. User verifies email → Redirected to main app
-3. User logs in → Check email verification → Access granted
-
-### Voice Recognition
-- Uses Arabic language model (ar-SA)
-- Detects Quran recitation patterns
-- Matches recognized text with Quran verses
-- Real-time feedback during prayer
-
-### Navigation
-- Tab-based navigation for main features
-- Stack navigation for authentication
-- Proper routing with authentication guards
-
-## Development
-
-### Running the App
 ```bash
 # Start development server
 npm start
@@ -112,102 +84,50 @@ npm run android
 npm run web
 ```
 
-### Building for Production
+## Voice Recognition
+
+Voice recognition works differently by platform:
+
+- **Web** - Uses Web Speech API (works in Expo web)
+- **Mobile** - Uses device recording + optional backend transcription
+
+For full voice transcription on mobile, set up the backend server:
+
 ```bash
-# Install EAS CLI
-npm install -g @expo/eas-cli
-
-# Build for platforms
-eas build --platform all
+cd backend
+npm install
+# Add OPENAI_API_KEY to .env
+npm start
 ```
-
-## Configuration
-
-### Environment Variables
-Create a `.env` file for sensitive configuration:
-```env
-FIREBASE_API_KEY=your_api_key
-FIREBASE_PROJECT_ID=your_project_id
-```
-
-### App Configuration
-- Update `app.json` for app metadata
-- Configure permissions in `app.json` plugins section
-- Set up deep linking if needed
-
-## Testing
-
-### Voice Recognition Testing
-1. Use real device (not simulator)
-2. Test with clear Arabic recitation
-3. Check microphone permissions
-4. Verify language model support
-
-### Authentication Testing
-1. Test signup flow
-2. Verify email verification
-3. Test login with verified/unverified accounts
-4. Test password reset
 
 ## Troubleshooting
 
-### Common Issues
+### Firebase Authentication Errors
 
-#### Speech Recognition Not Working
-- Ensure using development build, not Expo Go
-- Check microphone permissions
-- Verify device supports Arabic speech recognition
+- Verify Firebase config in `services/firebase.js`
+- Check that Email/Password auth is enabled in Firebase Console
 
-#### Firebase Authentication Errors
-- Verify Firebase config
-- Check Firebase console for errors
-- Ensure email verification is enabled
+### Voice Recognition Not Working
 
-#### Navigation Issues
-- Clear app cache
-- Check route definitions
-- Verify authentication state
+- Grant microphone permissions when prompted
+- On mobile, ensure the backend server is running for transcription
 
-### Performance Optimization
-- Implement lazy loading for Quran text
-- Cache frequently accessed data
-- Optimize voice recognition processing
-- Use proper image optimization
+### Arabic Text Issues
 
-## Deployment
+- Arabic text should render right-to-left automatically
+- If text appears garbled, check device font support
 
-### App Store / Play Store
-1. Build production version
-2. Test thoroughly on real devices
-3. Submit for review
-4. Monitor crash reports and analytics
+## Building for Production
 
-### Web Deployment
-1. Build web version
-2. Deploy to hosting service
-3. Configure custom domain
-4. Set up analytics
+```bash
+# Install EAS CLI
+npm install -g eas-cli
 
-## Contributing
-1. Fork the repository
-2. Create feature branch
-3. Make changes
-4. Test thoroughly
-5. Submit pull request
+# Build for platforms
+eas build --platform ios
+eas build --platform android
+```
 
 ## License
-This project is licensed under the MIT License.
 
-## Support
-For support and questions:
-- Create an issue in the repository
-- Check the documentation
-- Review troubleshooting section
-
-## Future Enhancements
-- Offline Quran text storage
-- Multiple translation languages
-- Advanced voice recognition algorithms
-- Prayer time notifications
-- Community features
-- Analytics and insights
+MIT License - see `LICENSE` for details.

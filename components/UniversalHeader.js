@@ -1,6 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { logout } from '@/services/firebase';
+import { signOutUser } from '@/services/firebase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
@@ -18,7 +18,7 @@ export default function UniversalHeader() {
 
     const handleLogout = async () => {
         try {
-            await logout();
+            await signOutUser();
             router.replace('/login');
         } catch (error) {
             console.error('Logout error:', error);
